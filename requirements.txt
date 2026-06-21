@@ -1,0 +1,28 @@
+# ── Inti (wajib) ──────────────────────────────────────────────
+requests>=2.31
+PyYAML>=6.0
+feedparser>=6.0
+APScheduler>=3.10
+
+# ── Ekstraksi artikel penuh (opsional, fallback ke ringkasan RSS bila gagal) ──
+trafilatura>=1.8 ; python_version < "3.14"
+beautifulsoup4>=4.12
+
+# ── X / Twitter (Fase 2) ──────────────────────────────────────
+twikit>=2.0           # jalur gratis (login akun); asinkron
+# Jalur berbayar (Apify) pakai REST biasa -> cukup 'requests' di atas.
+
+# ── Instagram (Fase 4) ────────────────────────────────────────
+instaloader>=4.11     # konten publik (login akun); Facebook = importer, tanpa lib
+
+# ── Analisis ──────────────────────────────────────────────────
+networkx>=3.2
+python-louvain>=0.16          # deteksi komunitas (import: community)
+
+# ── Sentimen transformer (IndoBERT — default engine) ──────────
+transformers>=4.40
+torch>=2.2
+
+# ── Dashboard (Fase 3) ────────────────────────────────────────
+streamlit>=1.33
+pandas>=2.0

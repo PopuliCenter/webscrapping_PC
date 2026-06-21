@@ -1,0 +1,95 @@
+# ============================================================
+#  Konfigurasi monitoring  (Drone-Emprit style)
+#  Edit kata kunci & sumber di sini, kode tidak perlu disentuh.
+# ============================================================
+
+# Kata kunci yang dipantau. Dipakai untuk filter & query GDELT.
+# Cocokkan case-insensitive terhadap judul + isi.
+keywords:
+  - "ibu kota nusantara"
+  - "ikn"
+  - "pemilu"
+  - "subsidi bbm"
+
+# Bahasa target untuk filter (kosongkan untuk semua).
+language: "id"
+
+# ── Sumber NEWS ──────────────────────────────────────────────
+news:
+  # RSS feed media Indonesia (gratis, stabil).
+  rss_feeds:
+    - "https://www.antaranews.com/rss/terkini.xml"
+    - "https://rss.tempo.co/nasional"
+    - "https://www.cnnindonesia.com/nasional/rss"
+    - "https://www.republika.co.id/rss"
+    - "https://news.detik.com/berita/rss"
+
+  # GDELT Doc API (gratis, tanpa key). Cari berita global per kata kunci.
+  gdelt:
+    enabled: true
+    timespan: "1d"        # rentang waktu tiap tarik: 15min, 1h, 1d, 1w...
+    max_records: 75       # maksimum 250 per query
+
+  # Ambil teks artikel penuh (lambat). Bila false / gagal -> pakai ringkasan RSS.
+  fetch_full_text: true
+
+# ── Sumber X / TWITTER (Fase 2) ──────────────────────────────
+x:
+  enabled: true
+  method: "auto"          # twikit | service | auto (twikit dulu, fallback service)
+  search_queries:         # query pencarian X (boleh beda dari keyword global)
+    - "ikn"
+    - "subsidi bbm"
+  tweets_per_query: 50
+  product: "Latest"       # Latest | Top
+
+  # Jalur GRATIS (login akun) — isi kredensial di file secrets terpisah.
+  twikit:
+    accounts_file: "secrets/x_accounts.yaml"
+    cookies_dir: "data/x_cookies"
+    min_delay_sec: 5      # jeda acak antar request (anti-limit)
+    max_delay_sec: 12
+
+  # Jalur BERBAYAR (fallback stabil) — token di environment variable.
+  service:
+    provider: "apify"
+    api_token_env: "APIFY_TOKEN"
+    actor: "apidojo~tweet-scraper"
+    input: {}             # opsi tambahan khusus actor (opsional)
+
+# ── Sumber INSTAGRAM (Fase 4) ────────────────────────────────
+instagram:
+  enabled: false          # nyalakan setelah isi secrets/ig_accounts.yaml
+  hashtags:
+    - "ikn"
+    - "pemilu"
+  posts_per_tag: 30
+  accounts_file: "secrets/ig_accounts.yaml"
+  cookies_dir: "data/ig_sessions"
+  min_delay_sec: 8        # jeda besar = lebih aman (IG agresif)
+  max_delay_sec: 20
+
+# ── Sumber FACEBOOK (Fase 4) ─────────────────────────────────
+# Scraping langsung tidak viable. Impor export Meta Content Library (CSV/JSON).
+facebook:
+  enabled: false
+  import_file: ""         # contoh: "data/fb_export.csv"
+
+# ── Penjadwalan ──────────────────────────────────────────────
+schedule:
+  news_minutes: 30        # tarik berita tiap N menit
+  x_minutes: 60           # tarik X tiap N menit
+  ig_minutes: 120         # tarik Instagram tiap N menit
+
+# ── Penyimpanan ──────────────────────────────────────────────
+storage:
+  db_path: "data/monitoring.db"
+
+# ── Analisis ─────────────────────────────────────────────────
+sentiment:
+  # "indobert" -> akurat (default), butuh transformers+torch. Otomatis fallback
+  #               ke "lexicon" bila library tak ada.
+  # "lexicon"  -> cepat, ringan, tanpa download model.
+  engine: "indobert"
+  # path opsional ke lexicon InSet (positive.tsv / negative.tsv). Kosong -> pakai bawaan kecil.
+  inset_dir: ""
