@@ -9,6 +9,8 @@ pendekatan [Drone Emprit](https://pers.droneemprit.id/). Dirancang untuk
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-aktif-success)
 
+📖 **Baru pertama pakai? Baca [PANDUAN.md](PANDUAN.md)** — cara pakai lengkap langkah demi langkah.
+
 ---
 
 ## ✨ Fitur
