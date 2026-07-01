@@ -3,6 +3,7 @@ data/
 __pycache__/
 *.pyc
 .venv/
+.venv_trash/
 venv/
 secrets/*.yaml
 !secrets/*.yaml.example

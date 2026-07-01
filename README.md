@@ -44,15 +44,32 @@ config.yaml ─┐
 
 ## 🚀 Mulai cepat
 
-```bash
-git clone https://github.com/uvukukiland/scrappingll_ver2.1.git
-cd scrappingll_ver2.1
-pip install -r requirements.txt
+Proyek ini memakai runtime **mandiri** — Python-nya tidak bergantung pada Python
+sistem, jadi aman meski kamu update/hapus Python di OS. Dua cara:
 
-python run_once.py                  # 1x siklus (Berita langsung jalan, tanpa kredensial)
-python scheduler.py                 # monitoring berkelanjutan (Ctrl+C berhenti)
-streamlit run dashboard/app.py      # buka dashboard
+**Opsi A — uv (native, Python 3.12 mandiri di luar sistem):**
+```powershell
+git clone https://github.com/PopuliCenter/webscrapping_PC.git
+cd webscrapping_PC
+uv python install 3.12               # unduh Python mandiri (lepas dari sistem)
+uv venv --python 3.12                # buat .venv
+uv pip install -r requirements.txt   # install semua
+.\.venv\Scripts\Activate.ps1         # aktifkan
+python run_once.py                   # Berita langsung jalan, tanpa kredensial
+streamlit run dashboard/app.py       # dashboard
 ```
+`.python-version` sudah mem-pin ke 3.12 → `uv` otomatis pakai versi itu.
+Belum punya uv? `pip install uv` atau `irm https://astral.sh/uv/install.ps1 | iex`.
+
+**Opsi B — Docker (isolasi penuh: Python + OS ikut dalam image):**
+```bash
+docker compose up -d --build         # scheduler + dashboard
+docker compose logs -f scheduler     # pantau
+# dashboard: http://localhost:8501
+```
+
+> Hindari `python -m venv` biasa untuk pemakaian jangka panjang: venv itu meminjam
+> Python sistem, jadi rusak bila Python sistem di-upgrade/dihapus.
 
 > **Berita** bekerja tanpa setup apa pun. Platform sosial perlu kredensial
 > (lihat di bawah) dan diaktifkan via `enabled: true` di `config.yaml`.
@@ -154,4 +171,4 @@ Tanggung jawab pengguna:
 
 ## 📄 Lisensi
 
-[MIT](LICENSE) © 2026 uvukukiland
+[MIT](LICENSE) © 2026 PopuliCenter

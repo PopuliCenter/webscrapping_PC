@@ -1,0 +1,33 @@
+# Dua service berbagi database SQLite lewat volume ./data:
+#   scheduler  -> scraping berkelanjutan (pakai IP residensial laptopmu)
+#   dashboard  -> Streamlit di http://localhost:8501
+#
+# Jalankan:  docker compose up -d --build
+# Log:       docker compose logs -f scheduler
+# Berhenti:  docker compose down
+
+services:
+  scheduler:
+    build: .
+    command: python scheduler.py
+    volumes:
+      - ./data:/app/data                       # DB persist di host
+      - ./secrets:/app/secrets                  # kredensial X/IG
+      - ./config.yaml:/app/config.yaml          # ubah config tanpa rebuild
+      - hf-cache:/root/.cache/huggingface       # cache model IndoBERT (tak unduh ulang)
+    environment:
+      - APIFY_TOKEN=${APIFY_TOKEN:-}            # jalur X berbayar (opsional)
+    restart: unless-stopped
+
+  dashboard:
+    build: .
+    command: ["streamlit", "run", "dashboard/app.py", "--server.address", "0.0.0.0", "--server.port", "8501", "--server.headless", "true"]
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data                        # baca DB yang sama
+      - ./config.yaml:/app/config.yaml
+    restart: unless-stopped
+
+volumes:
+  hf-cache:

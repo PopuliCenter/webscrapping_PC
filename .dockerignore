@@ -1,0 +1,11 @@
+.git/
+data/
+secrets/*.yaml
+!secrets/*.yaml.example
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.db
+*.session
+README.md
