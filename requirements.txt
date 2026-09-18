@@ -19,6 +19,17 @@ instaloader>=4.11     # konten publik (login akun); Facebook = importer, tanpa l
 networkx>=3.2
 python-louvain>=0.16          # deteksi komunitas (import: community)
 
+# ── Preprocessing & text mining Bahasa Indonesia ──────────────
+Sastrawi>=1.0.1               # stemming kata dasar Bahasa Indonesia
+
+# ── Klasifikasi ML (TF-IDF + SMOTE, 6 algoritma) ──────────────
+scikit-learn>=1.4
+imbalanced-learn>=0.12        # SMOTE
+
+# ── Visualisasi (word cloud & heatmap) ────────────────────────
+wordcloud>=1.9
+matplotlib>=3.8
+
 # ── Sentimen transformer (IndoBERT — default engine) ──────────
 transformers>=4.40
 torch>=2.2

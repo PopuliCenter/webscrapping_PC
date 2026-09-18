@@ -15,7 +15,8 @@ sampai baca hasil di dashboard.
 9. [Mengganti mesin sentimen](#9-mengganti-mesin-sentimen)
 10. [Menjalankan dengan Docker](#10-menjalankan-dengan-docker)
 11. [Alur kerja harian yang disarankan](#11-alur-kerja-harian-yang-disarankan)
-12. [Troubleshooting](#12-troubleshooting)
+12. [Analitik lanjutan (preprocessing, bot, word cloud, ML)](#12-analitik-lanjutan)
+13. [Troubleshooting](#13-troubleshooting)
 
 ---
 
@@ -266,7 +267,90 @@ docker compose down               # matikan
 
 ---
 
-## 12. Troubleshooting
+## 12. Analitik lanjutan
+
+Dashboard punya **7 tab**. Empat di antaranya untuk analisis mendalam.
+
+### a. Preprocessing teks (otomatis)
+Setiap teks melewati tahapan ini sebelum dianalisis:
+
+| Tahap | Contoh |
+|---|---|
+| Case folding | `Gakk SUKA` → `gakk suka` |
+| Cleansing | buang URL, `@mention`, emoji, angka, tanda baca; `bangettt`→`banget` |
+| Normalisasi kata baku | `gak`→`tidak`, `yg`→`yang`, `bgt`→`sangat` |
+| Stopword removal | buang `yang`, `di`, `dan`, … |
+| Stemming (Sastrawi) | `pembangunan` → `bangun` |
+
+Lihat hasil tiap tahap untuk laporan metodologi:
+```python
+from analysis.preprocess import Preprocessor
+p = Preprocessor()
+for tahap, hasil in p.steps("teks kamu di sini").items():
+    print(tahap, ":", hasil)
+```
+Tambah kamus sendiri: `Preprocessor(slang_file="kamus.csv", stopword_file="stopword.txt")`.
+Matikan stemming lewat checkbox di sidebar bila terasa lambat.
+
+### b. Tab ☁️ Teks & Word Cloud
+- **Word cloud** per sentimen (Semua / positif / netral / negatif).
+- **Kata paling sering** dan **frasa (bigram)** paling sering.
+- **Kata khas negatif vs positif** — kata yang paling membedakan kedua kelompok.
+
+### c. Tab 🔥 Heatmap
+- **Jam × Hari** — kapan perbincangan memuncak. Aktivitas merata 24 jam = indikasi bot.
+- **Topik × Sentimen** — topik mana yang paling negatif.
+
+### d. Tab 🤖 Bot/Buzzer
+Klik **Jalankan analisis bot**. Skor 0–1 dari lima sinyal perilaku:
+frekuensi posting, rasio konten duplikat, sebaran jam aktif, pola username
+(angka acak di belakang), dan rasio non-orisinal. Kategori: `rendah` /
+`sedang` / `tinggi`.
+
+Di bawahnya: **posting serentak** — teks identik yang disebar banyak akun
+dalam waktu berdekatan. Ini sinyal terkuat kampanye terkoordinasi.
+
+Menyaring bot dari analisis lain:
+```python
+from analysis.bot_detect import bot_actors
+bots = bot_actors("data/monitoring.db", threshold=0.6)
+```
+
+### e. Tab 🧪 Klasifikasi ML (TF-IDF + SMOTE)
+Membandingkan **6 algoritma** sebelum dan sesudah penyeimbangan data:
+Logistic Regression, Decision Tree, Random Forest, SVM, K-Nearest Neighbors,
+Naive Bayes.
+
+Atur proporsi data uji, maksimum fitur TF-IDF, dan n-gram, lalu klik
+**Latih & bandingkan model**. Hasil: tabel accuracy/precision/recall/F1
+**before vs after SMOTE** (+ kolom Δ F1) dan **confusion matrix** per model.
+
+Lewat terminal:
+```powershell
+python -m analysis.ml_classify
+```
+
+> **Catatan metodologi:** label latih diambil dari kolom sentimen di database
+> (hasil IndoBERT). Untuk riset yang ketat, sebaiknya gunakan data yang
+> dilabeli manual agar evaluasi tidak sirkular. SMOTE dilewati otomatis bila
+> kelas terkecil punya terlalu sedikit sampel.
+
+### f. Penilaian sentimen per-kata
+Untuk menelusuri *mengapa* sebuah teks dinilai negatif:
+```python
+from analysis.lexicon_id import LexiconScorer
+r = LexiconScorer().score("pelayanan tidak bagus, sangat kecewa")
+print(r["label"], r["score"])
+for d in r["details"]:
+    print(d)   # kata, bobot_dasar, faktor, kontribusi, alasan
+```
+Menangani **negasi** (`tidak bagus` → membalik) dan **penguat** (`sangat`,
+`sekali` → memperkuat). Pakai lexicon InSet bila ada:
+`LexiconScorer(inset_dir="path/ke/inset")`.
+
+---
+
+## 13. Troubleshooting
 
 | Masalah | Sebab & solusi |
 |---|---|
@@ -279,6 +363,11 @@ docker compose down               # matikan
 | Dashboard "Database kosong" | Jalankan `python run_once.py` dulu agar ada data. |
 | Bagian SNA kosong | Belum ada data interaksi — aktifkan collector X/IG. |
 | `.venv` rusak setelah update Python | Pakai runtime uv/Docker (mandiri). Buat ulang: `.\setup.ps1`. |
+| Word cloud / heatmap lambat | Matikan **Stemming** di sidebar, atau persempit filter platform/sentimen. |
+| "Data terlalu sedikit" di tab ML | Butuh ≥20 dokumen berlabel dan ≥2 kelas. Kumpulkan data lebih dulu. |
+| SMOTE "dilewati" | Kelas terkecil punya <2 sampel. Tambah data pada kelas minoritas. |
+| Semua skor F1 = 1.00 | Datanya terlalu seragam/sedikit sehingga mudah ditebak — bukan hasil valid. Perbanyak & ragamkan data. |
+| Stemming tidak jalan | `Sastrawi` belum terpasang: `uv pip install Sastrawi`. |
 
 ---
 

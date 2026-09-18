@@ -18,11 +18,15 @@ pendekatan [Drone Emprit](https://pers.droneemprit.id/). Dirancang untuk
 | Kemampuan | Detail |
 |---|---|
 | **Multi-sumber** | RSS media + GDELT (berita), X/Twitter, Instagram, Facebook |
-| **Sentimen Bahasa Indonesia** | IndoBERT (default, akurat) + lexicon (fallback ringan) |
+| **Preprocessing Bahasa Indonesia** | Hapus URL/mention/emoji/angka, normalisasi kata baku (slang→baku), stopword ID, **stemming Sastrawi**, deteksi near-duplicate |
+| **Sentimen Bahasa Indonesia** | IndoBERT (default, akurat) + lexicon + **penilaian per-kata** (negasi & penguat, bisa diaudit) |
+| **Klasifikasi ML** | TF-IDF + **SMOTE**, 6 algoritma (LogReg, Decision Tree, Random Forest, SVM, KNN, Naive Bayes), metrik **before vs after** |
+| **Deteksi bot / buzzer** | Skor heuristik perilaku + deteksi **posting serentak** (coordinated behavior) |
+| **Text mining** | Frekuensi kata, n-gram, kata khas per kelompok, **word cloud** |
 | **SNA** | Graf interaksi mention/retweet/quote → top aktor, betweenness, komunitas (Louvain) |
 | **Anti rate-limit** | Rotasi akun, cache sesi, proxy, backoff (jalur gratis) + fallback layanan berbayar |
 | **Monitoring berkelanjutan** | Scheduler per-platform dengan interval terpisah |
-| **Dashboard** | Streamlit: volume, distribusi sentimen, **tren sentimen per topik**, peta jaringan |
+| **Dashboard** | Streamlit 7 tab: ringkasan, tren per topik, word cloud, **heatmap**, jaringan, bot/buzzer, klasifikasi ML |
 | **Skema seragam** | Semua platform → satu tabel; SQLite, mudah migrasi ke PostgreSQL |
 
 ## 🏗️ Arsitektur
@@ -146,6 +150,9 @@ collectors/  base.py · news_rss · news_gdelt   # berita
              x_twikit · x_service · x_collect   # X (gratis/berbayar/auto)
              instagram · facebook               # IG + importer FB
 analysis/    sentiment.py · sna.py             # sentimen + SNA
+             preprocess.py · textstats.py     # preprocessing ID + frekuensi kata
+             lexicon_id.py · bot_detect.py    # skor per-kata + deteksi buzzer
+             ml_classify.py                   # TF-IDF + SMOTE + 6 classifier
 dashboard/   app.py                            # Streamlit
 run_once.py · scheduler.py                     # runner
 secrets/     *.yaml.example                    # template kredensial (gitignored)
@@ -158,7 +165,8 @@ secrets/     *.yaml.example                    # template kredensial (gitignored
 - [x] Fase 3 — SNA + Dashboard
 - [x] Fase 4 — Instagram + Facebook
 - [ ] Migrasi PostgreSQL untuk skala besar
-- [ ] Deteksi bot / klaster buzzer
+- [x] Fase 5 — Preprocessing ID, deteksi bot/buzzer, word cloud, heatmap, klasifikasi SMOTE
+- [ ] Topic modeling (LDA / BERTopic) & analisis emosi
 - [ ] Alert otomatis (lonjakan negatif)
 
 ## ⚖️ Etika & Legal
