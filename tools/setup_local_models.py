@@ -10,7 +10,7 @@ Jalankan:
     python tools/setup_local_models.py --emotion --sarkasme   # pilih sebagian
     python tools/setup_local_models.py --check      # cek status saja
 
-Pilihan: --sentimen --w11wo --emotion --sarkasme --zeroshot --all
+Pilihan: --sentimen --w11wo --emotion --sarkasme --zeroshot --indobertweet --all
 """
 from __future__ import annotations
 
@@ -38,6 +38,9 @@ MODELS = [
     ("--sarkasme", "sarkasme", SARKAS_HUB, SARKAS_DIR, "tab Intent & Sarkasme"),
     ("--zeroshot", "zero-shot (mDeBERTa)", ZS_MODELS["mdeberta"], ZS_LOKAL["mdeberta"],
      "intent zero-shot"),
+    ("--indobertweet", "dasar latih (IndoBERTweet)", "indolem/indobertweet-base-uncased",
+     os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                  "models", "indobertweet-base"), "model dasar fine-tuning sarkasme"),
 ]
 
 

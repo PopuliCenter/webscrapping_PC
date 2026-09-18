@@ -131,9 +131,21 @@ umum (`account_name`, `message`, `likes`, dst) otomatis.
 
 ## 🧠 Sentimen
 
-Default **IndoBERT** (`mdhugol/indonesia-bert-sentiment-classification`) — akurat,
-diproses **batch**, model (~500 MB) terunduh sekali otomatis. Bila
-`transformers`/`torch` tak tersedia, otomatis fallback ke **lexicon** (nol-setup).
+Model aktif: **hasil fine-tuning lokal** (`models/indobert-sentiment-finetuned`) —
+`w11wo` RoBERTa dilatih ulang dengan 21.000 data berlabel manusia. Dibanding model
+bawaan `mdhugol`: akurasi **0,546 → 0,750** (McNemar p ≈ 3×10⁻⁶⁴) dan tidak memburuk
+di domain lain (PRDECT-ID 0,958 → 0,961). Kosongkan `sentiment.model_dir` di
+`config.yaml` untuk kembali ke `mdhugol`. Bila `transformers`/`torch` tak tersedia,
+otomatis fallback ke **lexicon**.
+
+> Folder model hasil fine-tuning **tidak ikut di repo** (±500 MB, di-`.gitignore`).
+> Pada clone baru, program otomatis memakai `mdhugol` sambil memberi peringatan.
+> Buat ulang modelnya: `python tools/siapkan_data_latih.py sentimen` lalu
+> `python -m analysis.finetune_indobert --tugas sentimen --csv data/latih_20k.csv --output models/indobert-sentiment-finetuned`.
+
+**Fine-tuning di GPU laptop:** `python tools/pasang_torch_gpu.py` mengganti PyTorch
+`+cpu` (bawaan PyPI di Windows) dengan versi CUDA. Di RTX 3050 Laptop 4 GB, latihan
+sentimen 21.000 data ±15 menit, sarkasme ±6 menit. Lihat [PANDUAN §12g](PANDUAN.md).
 
 ## 🕸️ SNA & Dashboard
 
@@ -170,6 +182,7 @@ tools/       setup_local_models.py            # simpan model ke models/ (lokal)
              unduh_model.py                   # unduh model tahan-putus (resume)
              siapkan_data_latih.py            # CSV latih sentimen & sarkasme
              buat_notebook_colab.py           # pembangkit notebook Colab
+             pasang_torch_gpu.py              # pasang PyTorch CUDA (GPU NVIDIA)
 models/      (gitignored) model IndoBERT lokal & hasil fine-tuning
 dashboard/   app.py                            # Streamlit
 run_once.py · scheduler.py                     # runner

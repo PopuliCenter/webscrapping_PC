@@ -94,7 +94,11 @@ sentiment:
   # Folder model LOKAL. Kosong -> pakai models/indobert-sentiment (default).
   # Siapkan sekali:  python tools/setup_local_models.py
   # Setelah fine-tuning, arahkan ke: "models/indobert-sentiment-finetuned"
-  model_dir: ""
+  # Model hasil fine-tuning lokal (21.000 data berlabel manusia). Terbukti lebih baik dari
+  # mdhugol: akurasi 0.546 -> 0.750 (McNemar p~3e-64), setara di domain lain (p=0.79).
+  # Kosongkan ("") untuk kembali ke model bawaan mdhugol. Folder ini tidak ada di repo
+  # (di-.gitignore); bila tidak ditemukan, otomatis memakai mdhugol + peringatan.
+  model_dir: "models/indobert-sentiment-finetuned"
   # path opsional ke lexicon InSet (positive.tsv / negative.tsv). Kosong -> pakai bawaan kecil.
   inset_dir: ""
 

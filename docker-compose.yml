@@ -14,6 +14,7 @@ services:
       - ./data:/app/data                       # DB persist di host
       - ./secrets:/app/secrets                  # kredensial X/IG
       - ./config.yaml:/app/config.yaml          # ubah config tanpa rebuild
+      - ./models:/app/models:ro                 # model lokal (termasuk hasil fine-tuning)
       - hf-cache:/root/.cache/huggingface       # cache model IndoBERT (tak unduh ulang)
     environment:
       - APIFY_TOKEN=${APIFY_TOKEN:-}            # jalur X berbayar (opsional)
@@ -27,6 +28,7 @@ services:
     volumes:
       - ./data:/app/data                        # baca DB yang sama
       - ./config.yaml:/app/config.yaml
+      - ./models:/app/models:ro                 # model lokal (tab analisis di dashboard)
     restart: unless-stopped
 
 volumes:

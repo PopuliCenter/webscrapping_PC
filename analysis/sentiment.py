@@ -111,6 +111,11 @@ class SentimentEngine:
         internet dan bisa diganti hasil fine-tuning sendiri.
         """
         model_dir = model_dir or DEFAULT_MODEL_DIR
+        if not os.path.isabs(model_dir):
+            # relatif terhadap folder PROYEK, bukan folder tempat program dijalankan —
+            # kalau tidak, dari folder lain diam-diam kembali ke model Hub
+            model_dir = os.path.normpath(os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))), model_dir))
         sumber = model_dir if _is_local_model(model_dir) else HUB_MODEL
         if sumber == HUB_MODEL:
             print(f"[sentiment] model lokal tak ditemukan di '{model_dir}' "

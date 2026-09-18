@@ -9,3 +9,8 @@ venv/
 *.db
 *.session
 README.md
+
+# Model & cache besar: jangan ikut konteks build — model di-mount lewat compose
+models/
+.cache/
+.venv_trash/

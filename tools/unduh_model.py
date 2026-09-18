@@ -1,4 +1,4 @@
-"""Unduh model HuggingFace ke folder lokal — tahan koneksi putus.
+"""Unduh model HuggingFace (atau URL apa pun) ke folder lokal — tahan koneksi putus.
 
 Dibuat karena koneksi ke huggingface.co dari jaringan ini sering diputus
 (ConnectionReset 10054), sementara pengunduh bawaan kadang menggantung.
@@ -23,8 +23,10 @@ import time
 
 import requests
 
-# Cukup berkas yang dibutuhkan transformers (PyTorch). Lewati ONNX, .bin ganda, dll.
-POLA_DEFAULT = ["config.json", "*.safetensors", "tokenizer*", "vocab*", "merges.txt",
+# Cukup berkas yang dibutuhkan transformers (PyTorch). Lewati ONNX, optimizer.pt, dll.
+# pytorch_model.bin hanya dipakai bila repo TIDAK punya .safetensors (model lama).
+POLA_DEFAULT = ["config.json", "*.safetensors", "pytorch_model.bin",
+                "tokenizer*", "vocab*", "merges.txt",
                 "spm.model", "sentencepiece*.model", "special_tokens_map.json",
                 "added_tokens.json", "README.md", "*results.json"]
 TIMEOUT = (10, 60)
@@ -61,13 +63,16 @@ def daftar_berkas(repo: str, pola=None) -> list:
     return hasil
 
 
-def unduh_berkas(repo: str, nama: str, ukuran: int, folder: str, percobaan: int = 40):
-    tujuan = os.path.join(folder, nama)
+def unduh_url(url: str, tujuan: str, ukuran: int = 0, sha256: str = "",
+              percobaan: int = 60) -> str:
+    """Unduh URL apa pun ke `tujuan` dengan RESUME + (opsional) cek SHA-256."""
+    import hashlib
     sementara = tujuan + ".part"
+    nama = os.path.basename(tujuan)
     if os.path.isfile(tujuan) and (not ukuran or os.path.getsize(tujuan) == ukuran):
         print(f"  ✓ {nama} (sudah ada)")
-        return
-    url = f"https://huggingface.co/{repo}/resolve/main/{nama}"
+        return tujuan
+    os.makedirs(os.path.dirname(tujuan) or ".", exist_ok=True)
     for a in range(1, percobaan + 1):
         sudah = os.path.getsize(sementara) if os.path.isfile(sementara) else 0
         if ukuran and sudah >= ukuran:
@@ -94,8 +99,23 @@ def unduh_berkas(repo: str, nama: str, ukuran: int, folder: str, percobaan: int 
     akhir = os.path.getsize(sementara)
     if ukuran and akhir != ukuran:
         raise RuntimeError(f"{nama}: ukuran {akhir} ≠ {ukuran} di server")
+    if sha256:
+        h = hashlib.sha256()
+        with open(sementara, "rb") as f:
+            for potong in iter(lambda: f.read(1 << 20), b""):
+                h.update(potong)
+        if h.hexdigest() != sha256.lower():
+            os.remove(sementara)                   # rusak: buang, jangan dipasang
+            raise RuntimeError(f"{nama}: SHA-256 tidak cocok — berkas rusak, dihapus")
+        print(f"  ✓ SHA-256 cocok")
     os.replace(sementara, tujuan)
     print(f"  ✓ {nama} ({akhir / 1e6:.1f} MB)")
+    return tujuan
+
+
+def unduh_berkas(repo: str, nama: str, ukuran: int, folder: str):
+    unduh_url(f"https://huggingface.co/{repo}/resolve/main/{nama}",
+              os.path.join(folder, nama), ukuran)
 
 
 def unduh_model(repo: str, folder: str, pola=None) -> str:

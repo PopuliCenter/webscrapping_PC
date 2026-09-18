@@ -406,6 +406,44 @@ python -m analysis.finetune_indobert --tugas sarkasme --csv data/latih_sarkasme.
 CSV berkolom `text,label` (opsional `split` = train/validation/test).
 Protokolnya: urutan label **mengikuti model dasar**, **bobot kelas** untuk data
 timpang, dan angka akhir dari data **uji** yang tak pernah dilihat saat latihan.
+
+#### Melatih dengan GPU laptop (NVIDIA)
+
+`pip`/`uv install torch` di Windows memberi PyTorch versi **`+cpu`**, yang tidak
+bisa memakai GPU walau kartu NVIDIA ada. Pasang versi CUDA sekali:
+```powershell
+python tools/pasang_torch_gpu.py --cek    # lihat GPU & versi torch sekarang
+python tools/pasang_torch_gpu.py          # deteksi driver, unduh (±1,9 GB, bisa resume), pasang, uji
+```
+Setelah itu fine-tuning otomatis memakai GPU (`Perangkat : cuda`).
+
+**Alur yang disarankan — latih sebagai KANDIDAT, bandingkan, baru pakai:**
+```powershell
+python -m analysis.finetune_indobert --tugas sarkasme --csv data/latih_sarkasme.csv --epochs 8 --output models/sarkasme-kandidat
+python -m analysis.sarcasm --bandingkan models/sarkasme-kandidat
+
+python -m analysis.finetune_indobert --tugas sentimen --csv data/latih_20k.csv --epochs 3 --output models/sentimen-kandidat
+python -m analysis.hf_models --bandingkan models/sentimen-kandidat
+```
+Pembanding memakai **uji McNemar** pada teks yang sama: selisih F1 kecil sering
+hanya kebetulan. Kandidat dipakai hanya bila lebih baik secara signifikan.
+
+**VRAM kecil (mis. RTX 3050 4 GB):** batch 16 + `max_len 128` memakai ±2,3–2,9 GB.
+Kalau muncul pesan VRAM habis, kecilkan batch dan tambah akumulasi supaya batch
+efektif tetap sama: `--batch-size 8 --akumulasi 2`.
+
+**Hasil nyata di RTX 3050 Laptop (sarkasme, 1.878 tweet, 8 epoch):** ±6 menit,
+VRAM puncak 2,25 GB. F1 sarkas 0,7589 vs patokan 0,7273 — tapi McNemar
+p = 0,708 (**tidak signifikan**) dan salah cap tweet tulus justru naik (41 vs 34).
+Jadi patokan tetap dipakai. Pelajarannya: data latih umum tidak cukup — yang
+dibutuhkan contoh berlabel **dari topikmu sendiri**.
+
+> **Tips kecepatan:** memuat model & pustaka CUDA dari HDD terasa lambat di awal
+> (bisa beberapa menit). Bila laptopmu punya SSD dan HDD, letakkan proyek (atau
+> minimal folder `models/` dan `.venv/`) di SSD.
+>
+> **Laptop (Optimus):** saat mulai, GPU "bangun" dari mode hemat daya — `nvidia-smi`
+> kadang gagal sesaat. Wajar. Colokkan charger saat melatih; di baterai GPU dibatasi.
 Hasil disimpan ke `models/indobert-sentiment-finetuned/` (model asli tidak
 ditimpa). Pakai dengan mengubah `config.yaml`:
 ```yaml
@@ -601,7 +639,10 @@ python -m analysis.zeroshot --kalibrasi # kalibrasi ulang ambang 5 tingkat
 | Tab Emosi kosong | Jalankan `python tools/setup_local_models.py --emotion`, lalu klik **Analisis emosi dokumen**. |
 | Banding model: "label tidak bisa dipastikan" | Model memakai `LABEL_0/1/2` tanpa keterangan. Beri override eksplisit — **jangan** menebak urutannya. |
 | Dataset HF gagal dimuat | Perlu internet. Cek juga `uv pip install datasets`. |
-| Melatih sangat lambat | Wajar di CPU. Pakai notebook Colab (GPU gratis) di `notebooks/`. |
+| Melatih sangat lambat | Cek `python tools/pasang_torch_gpu.py --cek` — kalau torch `+cpu`, pasang versi GPU. Tanpa GPU: notebook Colab. |
+| "VRAM GPU habis" | `--batch-size 8 --akumulasi 2` (batch efektif sama), atau `--max-len 96`. |
+| `nvidia-smi` gagal sesaat | GPU laptop sedang bangun dari mode hemat daya — tunggu beberapa detik. |
+| Latihan lama sebelum mulai | Pustaka CUDA & model dimuat dari HDD. Pindahkan proyek ke SSD. |
 
 ---
 

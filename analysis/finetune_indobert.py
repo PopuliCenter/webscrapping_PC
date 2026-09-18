@@ -1,7 +1,9 @@
 """Fine-tuning model klasifikasi teks (sentimen / sarkasme) dengan data berlabel.
 
-Menjalankan di laptop (CPU) bisa, tapi lambat. Untuk data ribuan baris pakai
-notebooks/finetune_colab.ipynb (GPU gratis) — logikanya sama dengan berkas ini.
+Otomatis memakai GPU NVIDIA bila PyTorch versi CUDA terpasang
+(`python tools/pasang_torch_gpu.py`). Tanpa GPU tetap jalan di CPU, tapi lambat —
+alternatifnya notebooks/finetune_colab.ipynb (GPU gratis), logikanya sama.
+VRAM kecil (mis. 4 GB)? Pakai --batch-size kecil + --akumulasi.
 
 Protokol yang dipakai (menghindari kesalahan umum):
   1. URUTAN LABEL IKUT MODEL DASAR. Bila model dasar sudah punya kepala
@@ -36,11 +38,13 @@ TUGAS = {
     "sentimen": {
         # pemenang uji banding (acc 0.610 vs 0.548 mdhugol)
         "base": "w11wo/indonesian-roberta-base-sentiment-classifier",
+        "lokal": os.path.join(PROJECT_DIR, "models", "sentimen-w11wo"),
         "output": os.path.join(PROJECT_DIR, "models", "indobert-sentiment-finetuned"),
     },
     "sarkasme": {
         # IndoBERTweet: dilatih dari tweet -> cocok untuk data X
         "base": "indolem/indobertweet-base-uncased",
+        "lokal": os.path.join(PROJECT_DIR, "models", "indobertweet-base"),
         "output": os.path.join(PROJECT_DIR, "models", "sarkasme-finetuned"),
     },
 }
@@ -130,7 +134,7 @@ def selaraskan_label(base: str, kelas: list) -> tuple:
 # ── Pelatihan ───────────────────────────────────────────────────
 def finetune(data: dict, base: str, output_dir: str, epochs: int = 3,
              batch_size: int = 16, lr: float = 2e-5, max_len: int = 128,
-             seed: int = 42) -> dict:
+             grad_accum: int = 1, seed: int = 42) -> dict:
     try:
         import numpy as np
         import torch
@@ -185,7 +189,12 @@ def finetune(data: dict, base: str, output_dir: str, epochs: int = 3,
     kriteria = torch.nn.CrossEntropyLoss(weight=bobot)
 
     opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01)
-    total_langkah = len(dl_latih) * epochs
+    grad_accum = max(1, int(grad_accum))
+    total_langkah = -(-len(dl_latih) // grad_accum) * epochs      # ceil
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats()
+        print(f"GPU         : {torch.cuda.get_device_name(0)} | batch {batch_size} x "
+              f"akumulasi {grad_accum} = batch efektif {batch_size * grad_accum}")
     jadwal = get_linear_schedule_with_warmup(opt, int(0.1 * total_langkah), total_langkah)
     pakai_amp = device.type == "cuda"
     scaler = torch.amp.GradScaler("cuda") if pakai_amp else None
@@ -203,23 +212,37 @@ def finetune(data: dict, base: str, output_dir: str, epochs: int = 3,
         return asli, pred
 
     terbaik, state_terbaik, riwayat = -1.0, None, []
+    def langkah_optimizer():
+        # gradient clipping (norma 1.0) — standar fine-tuning BERT, cegah loncatan besar
+        if scaler:
+            scaler.unscale_(opt)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        if scaler:
+            scaler.step(opt)
+            scaler.update()
+        else:
+            opt.step()
+        opt.zero_grad()
+        jadwal.step()
+
     for ep in range(1, epochs + 1):
         model.train()
         total = 0.0
-        for ids, mask, y in dl_latih:
-            ids, mask, y = ids.to(device), mask.to(device), y.to(device)
-            opt.zero_grad()
-            with torch.autocast(device.type, enabled=pakai_amp):
-                loss = kriteria(model(input_ids=ids, attention_mask=mask).logits, y)
-            if scaler:
-                scaler.scale(loss).backward()
-                scaler.step(opt)
-                scaler.update()
-            else:
-                loss.backward()
-                opt.step()
-            jadwal.step()
-            total += loss.item()
+        opt.zero_grad()
+        try:
+            for i, (ids, mask, y) in enumerate(dl_latih, 1):
+                ids, mask, y = ids.to(device), mask.to(device), y.to(device)
+                with torch.autocast(device.type, enabled=pakai_amp):
+                    loss = kriteria(model(input_ids=ids, attention_mask=mask).logits, y)
+                (scaler.scale(loss / grad_accum) if scaler else loss / grad_accum).backward()
+                if i % grad_accum == 0 or i == len(dl_latih):
+                    langkah_optimizer()
+                total += loss.item()
+        except torch.cuda.OutOfMemoryError:
+            return {"error": f"VRAM GPU habis pada batch {batch_size}. Turunkan --batch-size "
+                             f"(mis. {max(1, batch_size // 2)}) dan naikkan --akumulasi "
+                             f"(mis. {grad_accum * 2}) agar batch efektif tetap sama, "
+                             f"atau kecilkan --max-len."}
         y, p = prediksi(dl_val)
         f1 = f1_score(y, p, average="macro", zero_division=0)
         riwayat.append({"epoch": ep, "loss": round(total / len(dl_latih), 4),
@@ -232,6 +255,9 @@ def finetune(data: dict, base: str, output_dir: str, epochs: int = 3,
               f"F1 validasi {f1:.4f}{tanda}")
 
     model.load_state_dict(state_terbaik)
+    if device.type == "cuda":
+        print(f"VRAM puncak : {torch.cuda.max_memory_allocated() / 1024**3:.2f} GB "
+              f"dari {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
     y, p = prediksi(dl_uji)
     nama_kelas = [id2label[i] for i in range(k)]
     print("\n=== Hasil pada data UJI (tidak pernah dilihat saat latihan) ===")
@@ -261,6 +287,9 @@ def main():
     ap.add_argument("--epochs", type=int, default=3)
     ap.add_argument("--batch-size", type=int, default=16)
     ap.add_argument("--lr", type=float, default=2e-5)
+    ap.add_argument("--akumulasi", type=int, default=1,
+                    help="gradient accumulation — batch efektif = batch-size x akumulasi "
+                         "(berguna bila VRAM kecil, mis. 4 GB)")
     ap.add_argument("--max-len", type=int, default=128)
     ap.add_argument("--output", default="")
     args = ap.parse_args()
@@ -289,16 +318,25 @@ def main():
     if not any(v[0] for v in data.values()):
         print("Tidak ada data latih ditemukan.")
         return
-    res = finetune(data, base=args.base or cfg["base"], output_dir=args.output or cfg["output"],
+    base = args.base or (cfg["lokal"] if _is_local_model(cfg["lokal"]) else cfg["base"])
+    res = finetune(data, base=base, output_dir=args.output or cfg["output"],
                    epochs=args.epochs, batch_size=args.batch_size, lr=args.lr,
-                   max_len=args.max_len)
+                   max_len=args.max_len, grad_accum=args.akumulasi)
     if "error" in res:
         print("Error:", res["error"])
+    elif os.path.abspath(args.output or cfg["output"]) != os.path.abspath(cfg["output"]):
+        print("\nDisimpan sebagai KANDIDAT (tidak otomatis dipakai). Bandingkan dulu:")
+        if args.tugas == "sarkasme":
+            print(f"  python -m analysis.sarcasm --bandingkan {args.output}")
+        else:
+            print(f"  python -m analysis.hf_models --bandingkan {args.output}")
+        print(f"Bila lebih baik, pindahkan/ganti nama foldernya ke {cfg['output']}")
     elif args.tugas == "sentimen":
         print('\nPakai dengan: config.yaml -> sentiment.model_dir: '
               '"models/indobert-sentiment-finetuned"')
     else:
-        print("\nModel sarkasme otomatis dipakai analysis/sarcasm.py bila folder ini ada.")
+        print("\nPERHATIAN: folder ini OTOMATIS dipakai analysis/sarcasm.py. Sebaiknya latih "
+              "ke --output models/sarkasme-kandidat lalu bandingkan dulu.")
 
 
 if __name__ == "__main__":

@@ -62,7 +62,7 @@ class SarcasmEngine:
             self._peta[v] = nama
         self._pipe = pipeline("text-classification", model=self.sumber,
                               tokenizer=self.sumber, top_k=None)
-        self.ambang = _muat_ambang()
+        self.ambang = _muat_ambang(self.sumber)
 
     def predict(self, texts: list, batch_size: int = 32) -> list:
         """-> [(label, peluang_sarkas), ...]"""
@@ -76,12 +76,19 @@ class SarcasmEngine:
         return hasil
 
 
-def _muat_ambang() -> float:
-    """Ambang peluang untuk menyebut 'sarkas'. Bawaan 0.5."""
+def _muat_ambang(sumber: str = "") -> float:
+    """Ambang peluang untuk menyebut 'sarkas'.
+
+    Ambang tersimpan HANYA berlaku untuk model tempat ia dikalibrasi — model lain
+    punya sebaran peluang berbeda, jadi memakai 0.5 sampai dikalibrasi ulang.
+    """
     import json
     if os.path.isfile(AMBANG_FILE):
         with open(AMBANG_FILE, encoding="utf-8") as f:
-            return float(json.load(f).get("ambang", 0.5))
+            isi = json.load(f)
+        model = isi.get("model")
+        if model is None or model == os.path.basename(os.path.normpath(sumber)):
+            return float(isi.get("ambang", 0.5))
     return 0.5
 
 
@@ -98,7 +105,7 @@ def _data_split(split: str) -> tuple:
     return teks, y
 
 
-def pilih_ambang(presisi_min: float = 0.85, simpan: bool = True) -> dict:
+def pilih_ambang(presisi_min: float = 0.85, simpan: bool = True, sumber: str = "") -> dict:
     """Pilih ambang di data VALIDASI, laporkan di data UJI (tanpa kebocoran).
 
     Dua pilihan:
@@ -109,7 +116,7 @@ def pilih_ambang(presisi_min: float = 0.85, simpan: bool = True) -> dict:
     import json
     from sklearn.metrics import precision_score, recall_score, f1_score
 
-    eng = SarcasmEngine()
+    eng = SarcasmEngine(sumber)
     tv, yv = _data_split("validation")
     tu, yu = _data_split("test")
     pv = [p for _, p in eng.predict(tv)]
@@ -138,7 +145,8 @@ def pilih_ambang(presisi_min: float = 0.85, simpan: bool = True) -> dict:
     if simpan:
         os.makedirs(os.path.dirname(AMBANG_FILE), exist_ok=True)
         with open(AMBANG_FILE, "w", encoding="utf-8") as f:
-            json.dump({"ambang": seimbang, "pilihan_presisi_tinggi": presisi_tinggi,
+            json.dump({"model": os.path.basename(os.path.normpath(eng.sumber)),
+                       "ambang": seimbang, "pilihan_presisi_tinggi": presisi_tinggi,
                        "dipilih_dari": "split validasi",
                        "hasil_uji_seimbang": tabel[seimbang]["uji"],
                        "hasil_uji_presisi_tinggi":
@@ -146,6 +154,47 @@ def pilih_ambang(presisi_min: float = 0.85, simpan: bool = True) -> dict:
                       f, indent=2)
         print(f"Ambang {seimbang} disimpan ke {AMBANG_FILE}")
     return hasil
+
+
+def bandingkan(kandidat: str, patokan: str = "", ambang: float = 0.5) -> dict:
+    """Bandingkan model KANDIDAT (hasil latihmu) dengan PATOKAN pada data uji resmi.
+
+    Memakai uji McNemar (pada tweet yang sama) — selisih F1 kecil pada 134 tweet
+    sarkas mudah terjadi karena kebetulan. Keputusan "pakai atau tidak" sebaiknya
+    mengikuti uji ini, plus jumlah tweet TULUS yang salah dicap sarkas.
+    Kedua model dinilai dengan AMBANG YANG SAMA (bawaan 0.5) agar adil.
+    """
+    from scipy.stats import binomtest
+    from sklearn.metrics import precision_score, recall_score, f1_score
+
+    patokan = patokan or DIR_W11WO
+    tu, yu = _data_split("test")
+    pred, ringkas = {}, {}
+    for nama, sumber in (("patokan", patokan), ("kandidat", kandidat)):
+        eng = SarcasmEngine(sumber)
+        eng.ambang = ambang
+        pred[nama] = [1 if lab == "sarkas" else 0 for lab, _ in eng.predict(tu)]
+        pr = pred[nama]
+        ringkas[nama] = {"model": os.path.basename(os.path.normpath(sumber)),
+                         "ambang": eng.ambang,
+                         "presisi": round(precision_score(yu, pr, zero_division=0), 4),
+                         "recall": round(recall_score(yu, pr, zero_division=0), 4),
+                         "f1": round(f1_score(yu, pr, zero_division=0), 4),
+                         "salah_cap_tulus": sum(1 for y, x in zip(yu, pr) if x == 1 and y == 0)}
+    a, b = pred["patokan"], pred["kandidat"]
+    k_menang = sum(1 for y, x, z in zip(yu, a, b) if z == y and x != y)
+    p_menang = sum(1 for y, x, z in zip(yu, a, b) if x == y and z != y)
+    n = k_menang + p_menang
+    p = binomtest(k_menang, n, 0.5).pvalue if n else 1.0
+    lebih_baik = (p < 0.05 and k_menang > p_menang and
+                  ringkas["kandidat"]["salah_cap_tulus"] <= ringkas["patokan"]["salah_cap_tulus"])
+    for nama, r in ringkas.items():
+        print(f"  {nama:<9} {r['model']:<22} ambang {r['ambang']:<4} presisi {r['presisi']:.4f} "
+              f"recall {r['recall']:.4f} F1 {r['f1']:.4f} | salah cap tweet tulus: {r['salah_cap_tulus']}")
+    print(f"  McNemar: kandidat menang {k_menang}, patokan menang {p_menang}, p = {p:.3f}")
+    print("  KEPUTUSAN:", "kandidat LEBIH BAIK — layak dipakai" if lebih_baik else
+          "belum terbukti lebih baik — tetap pakai patokan")
+    return {"ringkas": ringkas, "p_mcnemar": round(p, 4), "lebih_baik": lebih_baik}
 
 
 def _data_uji() -> tuple:
@@ -217,7 +266,9 @@ def analisis_db(db_path: str, limit: int = 1000) -> int:
 
 if __name__ == "__main__":
     import sys
-    if "--ambang" in sys.argv:
+    if "--bandingkan" in sys.argv:
+        bandingkan(sys.argv[sys.argv.index("--bandingkan") + 1])
+    elif "--ambang" in sys.argv:
         pilih_ambang()
     elif "--verifikasi" in sys.argv:
         print(verifikasi_label())

@@ -163,7 +163,84 @@ def tabel_ringkas(res: dict) -> list:
     return baris
 
 
+def _mcnemar(y, a, b) -> tuple:
+    """(kandidat menang, patokan menang, p) — uji McNemar eksak pada data yang sama."""
+    from scipy.stats import binomtest
+    km = sum(1 for t, x, z in zip(y, a, b) if z == t and x != t)
+    pm = sum(1 for t, x, z in zip(y, a, b) if x == t and z != t)
+    n = km + pm
+    return km, pm, (binomtest(km, n, 0.5).pvalue if n else 1.0)
+
+
+def _prediksi_biner(pipe, pemeta, teks: list) -> list:
+    """Positif/negatif saja: bandingkan P(positive) vs P(negative) (netral diabaikan)."""
+    out = pipe([(t or "")[:512] for t in teks], top_k=None, batch_size=32, truncation=True)
+    hasil = []
+    for per in out:
+        sk = {pemeta(o["label"]): o["score"] for o in per}
+        hasil.append("positive" if sk.get("positive", 0) >= sk.get("negative", 0) else "negative")
+    return hasil
+
+
+def bandingkan_sentimen(kandidat: str, patokan: str = "w11wo",
+                        csv_latih: str = "data/latih_20k.csv", n_prdect: int = 1000) -> dict:
+    """Bandingkan model sentimen KANDIDAT vs PATOKAN pada dua data uji.
+
+    (a) data UJI dari CSV latihan — dibangun ulang dengan split yang SAMA seperti saat
+        latihan (seed 42), jadi tak pernah dilihat kandidat.
+    (b) PRDECT-ID (ulasan produk, domain LAIN) — menguji apakah kandidat memang lebih
+        paham sentimen, bukan sekadar hafal gaya teks data latihnya.
+    """
+    import random
+    from sklearn.metrics import accuracy_score, f1_score
+    from analysis.finetune_indobert import load_csv, bagi_data
+
+    teks_a, y_a = bagi_data(load_csv(csv_latih))["test"]
+
+    from datasets import load_dataset
+    ds = load_dataset("ZakyF/PRDECT-ID", split="train")
+    pasangan = [(r["Customer Review"], str(r["Sentiment"]).strip().lower()) for r in ds
+                if r.get("Customer Review") and str(r.get("Sentiment")).strip().lower()
+                in ("positive", "negative")]
+    random.Random(42).shuffle(pasangan)
+    teks_b = [t for t, _ in pasangan[:n_prdect]]
+    y_b = [l for _, l in pasangan[:n_prdect]]
+
+    pred = {}
+    for nama, sumber in (("patokan", patokan), ("kandidat", kandidat)):
+        pipe, pemeta, mid = build_pipeline(sumber)
+        pred[nama] = {"a": predict_labels(pipe, pemeta, teks_a, batch_size=32),
+                      "b": _prediksi_biner(pipe, pemeta, teks_b), "model": mid}
+
+    hasil = {}
+    for kode, judul, y in (("a", f"(a) uji data latih — {len(y_a)} teks, 3 kelas", y_a),
+                           ("b", f"(b) PRDECT-ID domain lain — {len(y_b)} teks, pos/neg", y_b)):
+        print(judul)
+        baris = {}
+        for nama in ("patokan", "kandidat"):
+            pr = pred[nama][kode]
+            baris[nama] = {"akurasi": round(accuracy_score(y, pr), 4),
+                           "f1": round(f1_score(y, pr, average="macro", zero_division=0), 4)}
+            print(f"  {nama:<9} akurasi {baris[nama]['akurasi']:.4f}  F1 makro {baris[nama]['f1']:.4f}")
+        km, pm, p = _mcnemar(y, pred["patokan"][kode], pred["kandidat"][kode])
+        print(f"  McNemar: kandidat menang {km}, patokan menang {pm}, p = {p:.4g}")
+        baris["p"] = p
+        baris["kandidat_lebih_baik"] = p < 0.05 and km > pm
+        hasil[kode] = baris
+    layak = hasil["a"]["kandidat_lebih_baik"] and not (hasil["b"]["p"] < 0.05 and
+                                                      hasil["b"]["kandidat"]["akurasi"]
+                                                      < hasil["b"]["patokan"]["akurasi"])
+    print("KEPUTUSAN:", "kandidat LEBIH BAIK dan tidak memburuk di domain lain — layak dipakai"
+          if layak else "belum layak menggantikan patokan")
+    hasil["layak"] = layak
+    return hasil
+
+
 if __name__ == "__main__":
+    import sys
+    if "--bandingkan" in sys.argv:
+        bandingkan_sentimen(sys.argv[sys.argv.index("--bandingkan") + 1])
+        sys.exit(0)
     from analysis.hf_datasets import load_labeled
     print("Model tersedia:")
     for m in list_model():

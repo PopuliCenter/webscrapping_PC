@@ -15,3 +15,6 @@ x_cookies/
 
 # Lexicon InSet (diunduh otomatis oleh compare_labeling.py)
 resources/inset/
+
+# Cache unduhan (wheel torch GPU, dll.)
+.cache/
