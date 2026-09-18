@@ -438,6 +438,35 @@ p = 0,708 (**tidak signifikan**) dan salah cap tweet tulus justru naik (41 vs 34
 Jadi patokan tetap dipakai. Pelajarannya: data latih umum tidak cukup — yang
 dibutuhkan contoh berlabel **dari topikmu sendiri**.
 
+**Menambah data sarkasme dari dataset publik:**
+```powershell
+python tools/siapkan_data_latih.py sarkasme-plus reddit            # -> data/latih_sarkasme_reddit.csv
+python tools/siapkan_data_latih.py sarkasme-plus reddit argilla    # + 9,7k tweet politik 2025
+python -m analysis.finetune_indobert --tugas sarkasme --csv data/latih_sarkasme_reddit.csv --epochs 4 --output models/sarkasme-kandidat-reddit
+python -m analysis.sarcasm --bandingkan models/sarkasme-kandidat-reddit
+```
+Sumber (semua HuggingFace): `reddit` = 14k komentar r/indonesia berlabel tag `/s`
+(Apache-2.0), `argilla` = tweet 2025 berlabel manual (labelnya berisik),
+`sintetis` = 250 tweet sarkas buatan LLM. Data tambahan **hanya masuk data latih**;
+validasi & uji tetap tweet resmi, dan teks yang sama dengan data uji dibuang
+(cegah bocor). Pembanding kini juga menilai di uji Reddit (2.824 komentar).
+
+Hasil nyata (4 epoch, ±20–30 menit per model di RTX 3050):
+
+| Model | F1 uji Twitter | salah cap tulus | F1 uji Reddit |
+|---|---|---|---|
+| patokan (w11wo) | 0,727 | 34 | 0,369 |
+| + Reddit (13k latih) | 0,696 (p = 0,66, setara) | 31 | **0,606** (p ≈ 1e-21) |
+| + Reddit + Argilla (22k) | 0,692 (p = 0,46, setara) | 36 | 0,593 |
+
+Artinya: data tambahan **tidak** membuat model lebih jago di tweet (setara), tapi
+**jauh lebih tahan di teks non-Twitter** (komentar forum — mirip komentar IG/FB).
+Data Argilla tidak menambah apa pun (labelnya berisik). Patokan tetap dipakai
+untuk X; bila fokusmu komentar IG/FB, `models/sarkasme-kandidat-reddit` layak
+dipakai — ganti nama foldernya jadi `models/sarkasme-finetuned`.
+Dataset GitHub sengaja tidak dipakai: umumnya tanpa lisensi, kecil, atau labelnya
+otomatis/berisik.
+
 > **Tips kecepatan:** memuat model & pustaka CUDA dari HDD terasa lambat di awal
 > (bisa beberapa menit). Bila laptopmu punya SSD dan HDD, letakkan proyek (atau
 > minimal folder `models/` dan `.venv/`) di SSD.

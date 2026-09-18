@@ -92,11 +92,11 @@ def _muat_ambang(sumber: str = "") -> float:
     return 0.5
 
 
-def _data_split(split: str) -> tuple:
-    """(teks, label 0/1) satu split dari data/latih_sarkasme.csv."""
+def _data_split(split: str, berkas: str = "latih_sarkasme.csv") -> tuple:
+    """(teks, label 0/1) satu split dari data/<berkas>."""
     import csv
     teks, y = [], []
-    with open(os.path.join(PROJECT_DIR, "data", "latih_sarkasme.csv"),
+    with open(os.path.join(PROJECT_DIR, "data", berkas),
               encoding="utf-8", newline="") as f:
         for row in csv.DictReader(f):
             if row["split"] == split:
@@ -168,33 +168,47 @@ def bandingkan(kandidat: str, patokan: str = "", ambang: float = 0.5) -> dict:
     from sklearn.metrics import precision_score, recall_score, f1_score
 
     patokan = patokan or DIR_W11WO
-    tu, yu = _data_split("test")
-    pred, ringkas = {}, {}
+    # Uji utama: tweet (domain yang dipantau). Uji Reddit hanya informasi tambahan,
+    # tersedia setelah `python tools/siapkan_data_latih.py sarkasme-plus reddit`.
+    set_uji = [("Twitter", _data_split("test"))]
+    if os.path.isfile(os.path.join(PROJECT_DIR, "data", "latih_sarkasme_reddit.csv")):
+        set_uji.append(("Reddit", _data_split("test_reddit", "latih_sarkasme_reddit.csv")))
+    mesin = {}
     for nama, sumber in (("patokan", patokan), ("kandidat", kandidat)):
-        eng = SarcasmEngine(sumber)
-        eng.ambang = ambang
-        pred[nama] = [1 if lab == "sarkas" else 0 for lab, _ in eng.predict(tu)]
-        pr = pred[nama]
-        ringkas[nama] = {"model": os.path.basename(os.path.normpath(sumber)),
-                         "ambang": eng.ambang,
-                         "presisi": round(precision_score(yu, pr, zero_division=0), 4),
-                         "recall": round(recall_score(yu, pr, zero_division=0), 4),
-                         "f1": round(f1_score(yu, pr, zero_division=0), 4),
-                         "salah_cap_tulus": sum(1 for y, x in zip(yu, pr) if x == 1 and y == 0)}
-    a, b = pred["patokan"], pred["kandidat"]
-    k_menang = sum(1 for y, x, z in zip(yu, a, b) if z == y and x != y)
-    p_menang = sum(1 for y, x, z in zip(yu, a, b) if x == y and z != y)
-    n = k_menang + p_menang
-    p = binomtest(k_menang, n, 0.5).pvalue if n else 1.0
-    lebih_baik = (p < 0.05 and k_menang > p_menang and
-                  ringkas["kandidat"]["salah_cap_tulus"] <= ringkas["patokan"]["salah_cap_tulus"])
-    for nama, r in ringkas.items():
-        print(f"  {nama:<9} {r['model']:<22} ambang {r['ambang']:<4} presisi {r['presisi']:.4f} "
-              f"recall {r['recall']:.4f} F1 {r['f1']:.4f} | salah cap tweet tulus: {r['salah_cap_tulus']}")
-    print(f"  McNemar: kandidat menang {k_menang}, patokan menang {p_menang}, p = {p:.3f}")
-    print("  KEPUTUSAN:", "kandidat LEBIH BAIK — layak dipakai" if lebih_baik else
+        mesin[nama] = SarcasmEngine(sumber)
+        mesin[nama].ambang = ambang
+
+    hasil = {}
+    for judul, (tu, yu) in set_uji:
+        pred, ringkas = {}, {}
+        for nama, eng in mesin.items():
+            pr = pred[nama] = [1 if lab == "sarkas" else 0 for lab, _ in eng.predict(tu)]
+            ringkas[nama] = {"model": os.path.basename(os.path.normpath(eng.sumber)),
+                             "ambang": eng.ambang,
+                             "presisi": round(precision_score(yu, pr, zero_division=0), 4),
+                             "recall": round(recall_score(yu, pr, zero_division=0), 4),
+                             "f1": round(f1_score(yu, pr, zero_division=0), 4),
+                             "salah_cap_tulus": sum(1 for y, x in zip(yu, pr) if x == 1 and y == 0)}
+        a, b = pred["patokan"], pred["kandidat"]
+        k_menang = sum(1 for y, x, z in zip(yu, a, b) if z == y and x != y)
+        p_menang = sum(1 for y, x, z in zip(yu, a, b) if x == y and z != y)
+        n = k_menang + p_menang
+        p = binomtest(k_menang, n, 0.5).pvalue if n else 1.0
+        print(f"\n  == Uji {judul} ({len(yu)} teks, {sum(yu)} sarkas) ==")
+        for nama, r in ringkas.items():
+            print(f"  {nama:<9} {r['model']:<26} ambang {r['ambang']:<4} presisi {r['presisi']:.4f} "
+                  f"recall {r['recall']:.4f} F1 {r['f1']:.4f} | salah cap tulus: {r['salah_cap_tulus']}")
+        print(f"  McNemar: kandidat menang {k_menang}, patokan menang {p_menang}, p = {p:.3g}")
+        hasil[judul] = {"ringkas": ringkas, "p_mcnemar": p,
+                        "kandidat_unggul": p < 0.05 and k_menang > p_menang}
+
+    tw = hasil["Twitter"]
+    lebih_baik = (tw["kandidat_unggul"] and tw["ringkas"]["kandidat"]["salah_cap_tulus"]
+                  <= tw["ringkas"]["patokan"]["salah_cap_tulus"])
+    print("\n  KEPUTUSAN (berdasar uji Twitter):",
+          "kandidat LEBIH BAIK — layak dipakai" if lebih_baik else
           "belum terbukti lebih baik — tetap pakai patokan")
-    return {"ringkas": ringkas, "p_mcnemar": round(p, 4), "lebih_baik": lebih_baik}
+    return {"per_uji": hasil, "p_mcnemar": round(tw["p_mcnemar"], 4), "lebih_baik": lebih_baik}
 
 
 def _data_uji() -> tuple:
