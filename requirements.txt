@@ -34,6 +34,10 @@ matplotlib>=3.8
 transformers>=4.40
 torch>=2.2
 
+# ── Integrasi HuggingFace (dataset berlabel, banding model, emosi) ──
+datasets>=2.19               # unduh dataset berlabel manusia (streaming)
+huggingface_hub>=0.23        # unduh/unggah model
+
 # ── Dashboard (Fase 3) ────────────────────────────────────────
 streamlit>=1.33
 pandas>=2.0

@@ -16,7 +16,8 @@ sampai baca hasil di dashboard.
 10. [Menjalankan dengan Docker](#10-menjalankan-dengan-docker)
 11. [Alur kerja harian yang disarankan](#11-alur-kerja-harian-yang-disarankan)
 12. [Analitik lanjutan (preprocessing, bot, word cloud, ML)](#12-analitik-lanjutan)
-13. [Troubleshooting](#13-troubleshooting)
+13. [Integrasi HuggingFace (dataset, banding model, emosi, Colab)](#13-integrasi-huggingface)
+14. [Troubleshooting](#14-troubleshooting)
 
 ---
 
@@ -410,7 +411,100 @@ sentiment:
 
 ---
 
-## 13. Troubleshooting
+## 13. Integrasi HuggingFace
+
+### a. Dataset berlabel manusia — memperbaiki masalah label sirkular
+
+Melatih dari label keluaran IndoBERT sendiri itu sirkular. Dataset berikut
+dilabeli **manusia**, jadi layak dipakai melatih:
+
+| Kunci | Dataset | Baris | Kelas |
+|---|---|---|---|
+| `carant` | `carant-ai/indonesian_sentiment_dataset` | 1.030.393 | 3 (positive/neutral/negative) |
+| `sepid` | `sepidmnorozy/Indonesian_sentiment` | 11.324 | 2 (biner) |
+
+```python
+from analysis.hf_datasets import load_labeled, simpan_csv
+teks, label = load_labeled("carant", limit=20000, seimbang=True)
+simpan_csv(teks, label, "data/latih.csv")
+```
+Data diambil **streaming** — tidak menarik sejuta baris. Lalu latih:
+```powershell
+python -m analysis.finetune_indobert --csv data/latih.csv --epochs 3
+```
+
+> Dataset `IndonesiaAI/offline-school-sentiment-on-indonesian-twitter` sengaja
+> **tidak** didaftarkan: berbasis Twitter (menarik) tapi arti label 0/1/2-nya
+> tidak terdokumentasi. Pakai `load_custom()` hanya bila kamu sudah memastikan
+> sendiri maknanya — salah petakan membuat hasil terbalik.
+
+### b. Bandingkan model (tab 🔬 Banding Model)
+
+⚠️ **Setiap model memakai urutan label berbeda:**
+
+| Model | id2label |
+|---|---|
+| `mdhugol` (bawaan proyek) | `LABEL_0/1/2` (tak informatif → pakai override) |
+| `w11wo` | `0=positive, 1=neutral, 2=negative` |
+| `ayame` | `0=Positive, 1=Neutral, 2=Negative` |
+| `indobertweet` | `0=Negative, 1=Neutral, 2=Positive` ← **terbalik!** |
+
+Modul `hf_models.py` **membaca `id2label` dari config saat runtime** dan menolak
+jalan bila label tak bisa dipastikan — mencegah hasil terbalik tanpa disadari.
+
+```python
+from analysis.hf_datasets import load_labeled
+from analysis.hf_models import compare_models, tabel_ringkas
+teks, label = load_labeled("carant", limit=600, seimbang=True)
+res = compare_models(teks, label, ["mdhugol", "w11wo", "indobertweet"])
+```
+Atau lewat tab **🔬 Banding Model** di dashboard. Tiap model diunduh ±500 MB
+saat pertama dipakai.
+
+### c. Analisis emosi (tab 😠 Emosi)
+
+Model: `StevenLimcorn/indonesian-roberta-base-emotion-classifier` →
+**marah, takut, sedih, senang, cinta**.
+
+```powershell
+python tools/setup_local_models.py --emotion   # simpan model emosi ke lokal
+```
+Lalu klik **Analisis emosi dokumen** di tab Emosi. Dashboard menampilkan
+distribusi emosi, tren harian, heatmap emosi × sentimen, dan akun dengan emosi
+marah terbanyak.
+
+> Kenapa berguna: dua konten sama-sama "negatif" bisa sangat berbeda — yang
+> memicu **kemarahan** cenderung lebih cepat viral daripada yang memicu kesedihan.
+
+### d. Melatih di GPU gratis (Colab)
+
+Melatih di CPU laptop lambat. Untuk data ribuan, pakai
+[`notebooks/finetune_colab.ipynb`](notebooks/finetune_colab.ipynb):
+
+1. Buka [Google Colab](https://colab.research.google.com/) → `File > Upload notebook`
+2. `Runtime > Change runtime type > GPU`
+3. Jalankan sel dari atas ke bawah
+4. Unduh hasilnya, ekstrak ke `models/indobert-sentiment-finetuned/`
+5. Set `config.yaml → sentiment.model_dir`
+
+### e. Unggah model ke HuggingFace Hub
+
+⚠️ **Mengunggah = mengirim ke layanan eksternal.** Repo **privat** secara bawaan.
+
+```powershell
+setx HF_TOKEN "hf_xxx"                                    # token akses Write
+python tools/push_to_hub.py --repo namamu/model-ku        # PRATINJAU saja
+python tools/push_to_hub.py --repo namamu/model-ku --yes  # benar-benar unggah
+```
+Tanpa `--yes` skrip hanya menampilkan rencana, tidak mengirim apa pun.
+`--public` butuh konfirmasi ketik ulang.
+
+> Periksa data latihmu dulu: bobot model bisa menghafal potongan data, jadi
+> jangan unggah model yang dilatih dari data pribadi/sensitif.
+
+---
+
+## 14. Troubleshooting
 
 | Masalah | Sebab & solusi |
 |---|---|
@@ -432,6 +526,11 @@ sentiment:
 | Kata baru tak ter-stem | Tambahkan kata dasarnya ke `resources/kata_dasar_custom.txt`, lalu jalankan ulang. |
 | Slang tertentu tak dikenali | Tambahkan barisnya ke `resources/slang_baku.csv` (`slang,baku`). |
 | Fine-tuning kehabisan memori | Turunkan `--batch-size` (mis. 8 atau 4). |
+| "Can't load the configuration of ..." | Koneksi terputus saat mengunduh model. Ulangi; model besar (±500 MB/model). |
+| Tab Emosi kosong | Jalankan `python tools/setup_local_models.py --emotion`, lalu klik **Analisis emosi dokumen**. |
+| Banding model: "label tidak bisa dipastikan" | Model memakai `LABEL_0/1/2` tanpa keterangan. Beri override eksplisit — **jangan** menebak urutannya. |
+| Dataset HF gagal dimuat | Perlu internet. Cek juga `uv pip install datasets`. |
+| Melatih sangat lambat | Wajar di CPU. Pakai notebook Colab (GPU gratis) di `notebooks/`. |
 
 ---
 

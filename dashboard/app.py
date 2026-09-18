@@ -88,9 +88,11 @@ with st.sidebar:
 f = df[df["platform"].isin(sel_plat) & df["sentiment_label"].isin(sel_sent)]
 teks_terpilih = tuple(f["teks"].dropna().tolist())
 
-tab_ring, tab_topik, tab_teks, tab_heat, tab_sna, tab_bot, tab_ml = st.tabs(
+(tab_ring, tab_topik, tab_teks, tab_heat, tab_sna, tab_bot, tab_ml,
+ tab_emo, tab_hf) = st.tabs(
     ["📊 Ringkasan", "📈 Topik", "☁️ Teks & Word Cloud", "🔥 Heatmap",
-     "🕸️ Jaringan", "🤖 Bot/Buzzer", "🧪 Klasifikasi ML"])
+     "🕸️ Jaringan", "🤖 Bot/Buzzer", "🧪 Klasifikasi ML",
+     "😠 Emosi", "🔬 Banding Model"])
 
 
 # ── TAB 1: Ringkasan ────────────────────────────────────────────
@@ -448,5 +450,109 @@ with tab_ml:
                     draw_heatmap(mat, f"Confusion matrix — {nama_model}")
     else:
         st.info("Atur parameter lalu klik tombol untuk melatih model.")
+
+# ── TAB 8: Emosi ────────────────────────────────────────────────
+with tab_emo:
+    st.subheader("😠 Analisis emosi")
+    st.caption("Lebih rinci dari positif/negatif: marah, takut, sedih, senang, cinta. "
+               "Dua berita sama-sama negatif bisa berbeda — yang memicu KEMARAHAN "
+               "biasanya lebih cepat viral daripada yang memicu kesedihan.")
+
+    punya_emosi = ("emotion_label" in f.columns and
+                   f["emotion_label"].notna().any() and
+                   (f["emotion_label"].astype(str).str.len() > 0).any())
+
+    if st.button("Analisis emosi dokumen", type="primary"):
+        from analysis.emotion import analisis_db
+        with st.spinner("Menganalisis emosi (model diunduh sekali bila belum ada)..."):
+            n = analisis_db(_db_path(), limit=2000)
+        st.success(f"{n} dokumen dianalisis.") if n else st.warning(
+            "Tidak ada yang dianalisis. Pastikan model emosi tersedia: "
+            "`python tools/setup_local_models.py --emotion`")
+        load_docs.clear()
+        st.rerun()
+
+    if not punya_emosi:
+        st.info("Belum ada data emosi. Klik tombol di atas untuk menganalisis.")
+    else:
+        fe = f[f["emotion_label"].astype(str).str.len() > 0].copy()
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Distribusi emosi**")
+            st.bar_chart(fe["emotion_label"].value_counts())
+        with c2:
+            st.markdown("**Emosi per hari**")
+            fed = fe.dropna(subset=["dt"])
+            if not fed.empty:
+                tren = (fed.set_index("dt").groupby("emotion_label")
+                          .resample("D").size().reset_index(name="jumlah"))
+                st.line_chart(tren.pivot(index="dt", columns="emotion_label",
+                                         values="jumlah").fillna(0))
+
+        st.markdown("**Emosi × Sentimen**")
+        m = fe.pivot_table(index="emotion_label", columns="sentiment_label",
+                           values="doc_id", aggfunc="count", fill_value=0)
+        draw_heatmap(m, "Jumlah dokumen per emosi dan sentimen")
+
+        st.markdown("**Akun/sumber dengan emosi marah terbanyak**")
+        marah = fe[fe["emotion_label"] == "marah"]
+        if not marah.empty:
+            st.dataframe(marah["source"].value_counts().head(10)
+                         .rename_axis("sumber").reset_index(name="jumlah"),
+                         width="stretch")
+        else:
+            st.caption("Tidak ada dokumen berlabel 'marah' pada filter ini.")
+
+
+# ── TAB 9: Banding model HuggingFace ────────────────────────────
+with tab_hf:
+    st.subheader("🔬 Bandingkan model sentimen")
+    st.caption("Menguji beberapa model Indonesia dari HuggingFace pada data "
+               "BERLABEL MANUSIA, supaya perbandingannya sahih.")
+
+    from analysis.hf_models import list_model, compare_models, tabel_ringkas
+    from analysis.hf_datasets import list_sumber, load_labeled
+
+    daftar = list_model()
+    st.markdown("**Model yang tersedia**")
+    st.dataframe(pd.DataFrame(daftar), width="stretch")
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        pilih_model = st.multiselect("Model diuji", [m["kunci"] for m in daftar],
+                                     default=[m["kunci"] for m in daftar][:2])
+    with c2:
+        sumber = st.selectbox("Dataset uji (berlabel manusia)",
+                              [d["kunci"] for d in list_sumber()])
+    with c3:
+        n_uji = st.slider("Jumlah contoh uji", 50, 500, 150, step=50)
+
+    st.caption("Catatan: model diunduh saat pertama dipakai (±500 MB per model).")
+
+    if st.button("Jalankan perbandingan", type="primary"):
+        if not pilih_model:
+            st.warning("Pilih minimal satu model.")
+        else:
+            with st.spinner("Mengambil data uji berlabel..."):
+                teks_u, label_u = load_labeled(sumber, limit=n_uji * 4, seimbang=True)
+            if not teks_u:
+                st.error("Dataset uji gagal dimuat (cek koneksi internet).")
+            else:
+                with st.spinner(f"Menguji {len(pilih_model)} model..."):
+                    res = compare_models(teks_u, label_u, pilih_model, max_sample=n_uji)
+                if "error" in res:
+                    st.error(res["error"])
+                else:
+                    st.markdown(f"**Hasil** — {res['n_uji']} contoh uji, "
+                                f"kelas: {', '.join(res['kelas'])}")
+                    st.dataframe(pd.DataFrame(tabel_ringkas(res)), width="stretch")
+                    if res.get("terbaik"):
+                        st.success(f"Terbaik: **{res['terbaik']}** — "
+                                   f"atur di config.yaml → sentiment.model_dir "
+                                   f"atau unduh model tersebut.")
+                    gagal = [k for k, v in res["hasil"].items() if "error" in v]
+                    if gagal:
+                        st.warning(f"Gagal dimuat (biasanya koneksi): {', '.join(gagal)}")
+
 
 st.caption("Data auto-refresh tiap 60 detik. Atur sumber & kata kunci di config.yaml.")

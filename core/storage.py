@@ -27,7 +27,9 @@ CREATE TABLE IF NOT EXISTS documents (
     raw              TEXT,
     keywords_matched TEXT,
     sentiment_label  TEXT,
-    sentiment_score  REAL
+    sentiment_score  REAL,
+    emotion_label    TEXT,
+    emotion_score    REAL
 );
 CREATE INDEX IF NOT EXISTS idx_docs_platform   ON documents(platform);
 CREATE INDEX IF NOT EXISTS idx_docs_published  ON documents(published_at);
@@ -53,6 +55,15 @@ class Storage:
         self.db_path = db_path
         with self._conn() as c:
             c.executescript(SCHEMA)
+            self._migrate(c)
+
+    @staticmethod
+    def _migrate(c):
+        """Tambah kolom baru pada database lama tanpa kehilangan data."""
+        ada = {r[1] for r in c.execute("PRAGMA table_info(documents)").fetchall()}
+        for kolom, tipe in (("emotion_label", "TEXT"), ("emotion_score", "REAL")):
+            if kolom not in ada:
+                c.execute(f"ALTER TABLE documents ADD COLUMN {kolom} {tipe}")
 
     @contextmanager
     def _conn(self):
@@ -94,6 +105,22 @@ class Storage:
         with self._conn() as c:
             c.execute(
                 "UPDATE documents SET sentiment_label=?, sentiment_score=? WHERE doc_id=?",
+                (label, score, doc_id),
+            )
+
+    def docs_without_emotion(self, limit: int = 500):
+        with self._conn() as c:
+            cur = c.execute(
+                "SELECT doc_id, title, content FROM documents "
+                "WHERE emotion_label IS NULL OR emotion_label = '' LIMIT ?",
+                (limit,),
+            )
+            return [dict(r) for r in cur.fetchall()]
+
+    def update_emotion(self, doc_id: str, label: str, score):
+        with self._conn() as c:
+            c.execute(
+                "UPDATE documents SET emotion_label=?, emotion_score=? WHERE doc_id=?",
                 (label, score, doc_id),
             )
 

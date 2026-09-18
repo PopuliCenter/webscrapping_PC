@@ -20,6 +20,7 @@ pendekatan [Drone Emprit](https://pers.droneemprit.id/). Dirancang untuk
 | **Multi-sumber** | RSS media + GDELT (berita), X/Twitter, Instagram, Facebook |
 | **Preprocessing Bahasa Indonesia** | Hapus URL/mention/emoji/angka, normalisasi kata baku (slang→baku), stopword ID, **stemming Sastrawi**, penanganan **negasi** (`tidak bagus`→`tidak_bagus`), near-duplicate |
 | **Kamus & model lokal** | Kamus di `resources/` bisa diedit (berlaku seketika); IndoBERT disimpan lokal di `models/` dan **bisa di-fine-tune** dengan data sendiri |
+| **Integrasi HuggingFace** | Dataset **berlabel manusia** (1 jt+ baris), **banding antar-model** dengan pemetaan label aman, **analisis emosi** (marah/takut/sedih/senang/cinta), unggah ke Hub + notebook Colab GPU |
 | **Sentimen Bahasa Indonesia** | IndoBERT (default, akurat) + lexicon + **penilaian per-kata** (negasi & penguat, bisa diaudit) |
 | **Klasifikasi ML** | TF-IDF + **SMOTE**, 6 algoritma (LogReg, Decision Tree, Random Forest, SVM, KNN, Naive Bayes), metrik **before vs after** |
 | **Deteksi bot / buzzer** | Skor heuristik perilaku + deteksi **posting serentak** (coordinated behavior) |
@@ -155,9 +156,13 @@ analysis/    sentiment.py · sna.py             # sentimen + SNA
              lexicon_id.py · bot_detect.py    # skor per-kata + deteksi buzzer
              ml_classify.py                   # TF-IDF + SMOTE + 6 classifier
              finetune_indobert.py             # latih ulang IndoBERT (data berlabel)
+             hf_datasets.py · hf_models.py    # dataset berlabel HF + banding model
+             emotion.py                       # emosi: marah/takut/sedih/senang/cinta
+notebooks/   finetune_colab.ipynb             # latih dgn GPU gratis (Google Colab)
 resources/   kata_dasar_custom.txt · slang_baku.csv · stopwords_custom.txt
              # kamus lokal — edit bebas, berlaku langsung tanpa training
-tools/       setup_local_models.py            # simpan IndoBERT ke models/ (lokal)
+tools/       setup_local_models.py            # simpan model ke models/ (lokal)
+             push_to_hub.py                   # unggah model ke HF (privat, perlu --yes)
 models/      (gitignored) model IndoBERT lokal & hasil fine-tuning
 dashboard/   app.py                            # Streamlit
 run_once.py · scheduler.py                     # runner
@@ -172,7 +177,8 @@ secrets/     *.yaml.example                    # template kredensial (gitignored
 - [x] Fase 4 — Instagram + Facebook
 - [ ] Migrasi PostgreSQL untuk skala besar
 - [x] Fase 5 — Preprocessing ID, deteksi bot/buzzer, word cloud, heatmap, klasifikasi SMOTE
-- [ ] Topic modeling (LDA / BERTopic) & analisis emosi
+- [x] Fase 6 — Integrasi HuggingFace: dataset berlabel, banding model, emosi, Colab GPU
+- [ ] Topic modeling (LDA / BERTopic), NER, peta geografis, ekspor laporan PDF/Excel
 - [ ] Alert otomatis (lonjakan negatif)
 
 ## ⚖️ Etika & Legal
