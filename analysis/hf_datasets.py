@@ -111,17 +111,22 @@ def load_custom(dataset_id: str, text_col: str, label_col: str,
     return teks, label
 
 
-def _seimbangkan(teks: list, label: list) -> tuple:
-    """Potong tiap kelas ke jumlah kelas terkecil."""
+def _seimbangkan(teks: list, label: list, seed: int = 42) -> tuple:
+    """Potong tiap kelas ke jumlah kelas terkecil, lalu ACAK.
+
+    Pengacakan itu WAJIB: tanpa itu keluarannya terurut per kelas, sehingga
+    memotong hasilnya (mis. `teks[:20000]`) hanya mengambil kelas pertama saja
+    dan data kembali timpang.
+    """
+    import random
     per_kelas = {}
     for t, l in zip(teks, label):
         per_kelas.setdefault(l, []).append(t)
     n = min(len(v) for v in per_kelas.values())
-    out_t, out_l = [], []
-    for l, items in per_kelas.items():
-        out_t.extend(items[:n])
-        out_l.extend([l] * n)
-    return out_t, out_l
+    pasangan = [(t, l) for l, items in per_kelas.items() for t in items[:n]]
+    random.Random(seed).shuffle(pasangan)
+    out_t, out_l = zip(*pasangan) if pasangan else ([], [])
+    return list(out_t), list(out_l)
 
 
 def simpan_csv(teks: list, label: list, path: str) -> str:

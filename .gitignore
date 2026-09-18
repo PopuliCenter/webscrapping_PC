@@ -12,3 +12,6 @@ secrets/*.yaml
 !secrets/*.yaml.example
 *.session
 x_cookies/
+
+# Lexicon InSet (diunduh otomatis oleh compare_labeling.py)
+resources/inset/
