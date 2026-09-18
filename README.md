@@ -18,7 +18,8 @@ pendekatan [Drone Emprit](https://pers.droneemprit.id/). Dirancang untuk
 | Kemampuan | Detail |
 |---|---|
 | **Multi-sumber** | RSS media + GDELT (berita), X/Twitter, Instagram, Facebook |
-| **Preprocessing Bahasa Indonesia** | Hapus URL/mention/emoji/angka, normalisasi kata baku (slang→baku), stopword ID, **stemming Sastrawi**, deteksi near-duplicate |
+| **Preprocessing Bahasa Indonesia** | Hapus URL/mention/emoji/angka, normalisasi kata baku (slang→baku), stopword ID, **stemming Sastrawi**, penanganan **negasi** (`tidak bagus`→`tidak_bagus`), near-duplicate |
+| **Kamus & model lokal** | Kamus di `resources/` bisa diedit (berlaku seketika); IndoBERT disimpan lokal di `models/` dan **bisa di-fine-tune** dengan data sendiri |
 | **Sentimen Bahasa Indonesia** | IndoBERT (default, akurat) + lexicon + **penilaian per-kata** (negasi & penguat, bisa diaudit) |
 | **Klasifikasi ML** | TF-IDF + **SMOTE**, 6 algoritma (LogReg, Decision Tree, Random Forest, SVM, KNN, Naive Bayes), metrik **before vs after** |
 | **Deteksi bot / buzzer** | Skor heuristik perilaku + deteksi **posting serentak** (coordinated behavior) |
@@ -153,6 +154,11 @@ analysis/    sentiment.py · sna.py             # sentimen + SNA
              preprocess.py · textstats.py     # preprocessing ID + frekuensi kata
              lexicon_id.py · bot_detect.py    # skor per-kata + deteksi buzzer
              ml_classify.py                   # TF-IDF + SMOTE + 6 classifier
+             finetune_indobert.py             # latih ulang IndoBERT (data berlabel)
+resources/   kata_dasar_custom.txt · slang_baku.csv · stopwords_custom.txt
+             # kamus lokal — edit bebas, berlaku langsung tanpa training
+tools/       setup_local_models.py            # simpan IndoBERT ke models/ (lokal)
+models/      (gitignored) model IndoBERT lokal & hasil fine-tuning
 dashboard/   app.py                            # Streamlit
 run_once.py · scheduler.py                     # runner
 secrets/     *.yaml.example                    # template kredensial (gitignored)

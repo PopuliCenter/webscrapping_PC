@@ -1,0 +1,67 @@
+# Kamus normalisasi: slang/alay -> kata baku
+# Format: slang,baku   (satu pasang per baris; '#' = komentar)
+# Nilai baku kosong berarti kata DIBUANG, contoh:  wkwk,
+#
+# File ini DITAMBAHKAN di atas kamus bawaan (analysis/preprocess.py).
+# Bila kata yang sama ada di dua tempat, isi file ini yang menang.
+# Berlaku langsung tanpa training.
+
+# ── singkatan umum ──
+yg,yang
+dgn,dengan
+utk,untuk
+krn,karena
+tdk,tidak
+sdh,sudah
+blm,belum
+bgt,sangat
+jd,jadi
+jg,juga
+dr,dari
+pd,pada
+dlm,dalam
+sbg,sebagai
+spt,seperti
+hrs,harus
+bs,bisa
+tp,tetapi
+msh,masih
+skrg,sekarang
+
+# ── ragam lisan -> baku ──
+gak,tidak
+nggak,tidak
+kagak,tidak
+kalo,kalau
+gimana,bagaimana
+kenapa,mengapa
+bikin,buat
+ngasih,beri
+dapet,dapat
+liat,lihat
+pengen,ingin
+nyampe,sampai
+udahan,selesai
+banget,sangat
+doang,saja
+gitu,begitu
+gini,begini
+
+# ── istilah politik/ekonomi yang sering disingkat ──
+pemrintah,pemerintah
+kebjakan,kebijakan
+anggran,anggaran
+subsidi bbm,subsidi bahan bakar minyak
+
+# ── kata yang dibuang (tanpa makna analitis) ──
+wkwk,
+wkwkwk,
+hehe,
+haha,
+hahaha,
+anjir,
+njir,
+cuy,
+gan,
+sis,
+bro,

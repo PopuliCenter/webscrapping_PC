@@ -279,8 +279,28 @@ Setiap teks melewati tahapan ini sebelum dianalisis:
 | Case folding | `Gakk SUKA` → `gakk suka` |
 | Cleansing | buang URL, `@mention`, emoji, angka, tanda baca; `bangettt`→`banget` |
 | Normalisasi kata baku | `gak`→`tidak`, `yg`→`yang`, `bgt`→`sangat` |
-| Stopword removal | buang `yang`, `di`, `dan`, … |
+| Stopword removal | buang `yang`, `di`, `dan`, … (kata negasi **tidak** dibuang) |
 | Stemming (Sastrawi) | `pembangunan` → `bangun` |
+| Gabung negasi | `tidak bagus` → `tidak_bagus` (satu fitur tersendiri) |
+
+> **Kenapa negasi dipertahankan?** Kalau `tidak` ikut dibuang sebagai stopword,
+> `tidak suka` berubah jadi `suka` — maknanya terbalik. Karena itu kata negasi
+> disimpan lalu digabung dengan kata sesudahnya. Matikan dengan
+> `Preprocessor(merge_negation=False)` bila tak diinginkan.
+
+**Kamus lokal yang bisa kamu edit** (folder `resources/`, berlaku langsung
+tanpa melatih apa pun — cukup jalankan ulang program):
+
+| File | Isi | Contoh efek |
+|---|---|---|
+| `kata_dasar_custom.txt` | kata dasar tambahan untuk Sastrawi | tambah `buzzer` → `pembuzzeran` jadi `buzzer` |
+| `slang_baku.csv` | `slang,baku` | `nyampe,sampai` ; `cuy,` (baris kosong = kata dibuang) |
+| `stopwords_custom.txt` | stopword tambahan | tambah `selengkapnya` agar noise RSS hilang |
+
+Cek status kamus & model:
+```powershell
+python tools/setup_local_models.py --check
+```
 
 Lihat hasil tiap tahap untuk laporan metodologi:
 ```python
@@ -348,6 +368,46 @@ Menangani **negasi** (`tidak bagus` → membalik) dan **penguat** (`sangat`,
 `sekali` → memperkuat). Pakai lexicon InSet bila ada:
 `LexiconScorer(inset_dir="path/ke/inset")`.
 
+### g. Model lokal & melatih ulang
+
+**Simpan IndoBERT ke folder proyek** (sekali saja, ±500 MB) agar tidak
+bergantung internet / cache HuggingFace:
+```powershell
+python tools/setup_local_models.py
+```
+Model masuk ke `models/indobert-sentiment/`. Folder `models/` sengaja
+di-`.gitignore` karena besar — buat ulang dengan perintah yang sama.
+
+**Dua cara "melatih" — beda sifatnya:**
+
+| | Sastrawi | IndoBERT |
+|---|---|---|
+| Sifat | aturan + kamus kata dasar | jaringan saraf |
+| Menambah kata baru | tulis di `resources/kata_dasar_custom.txt` | tidak cukup hanya kata |
+| Perlu training? | **Tidak** — langsung berlaku | **Ya** — perlu contoh kalimat berlabel |
+| Waktu | seketika | menit s/d jam |
+
+IndoBERT tidak bisa "diajari kata" begitu saja: tokenizer-nya memecah kata
+asing jadi sub-kata sehingga tetap terbaca. Yang perlu diajarkan adalah
+**makna kata itu dalam kalimat**, lewat fine-tuning:
+
+```powershell
+# data latih CSV berkolom: text,label   (label: positive/neutral/negative)
+python -m analysis.finetune_indobert --csv data/latih.csv --epochs 3
+```
+Hasil disimpan ke `models/indobert-sentiment-finetuned/` (model asli tidak
+ditimpa). Pakai dengan mengubah `config.yaml`:
+```yaml
+sentiment:
+  engine: "indobert"
+  model_dir: "models/indobert-sentiment-finetuned"
+```
+
+> **Peringatan:** `--from-db` melatih memakai label yang dihasilkan IndoBERT
+> sendiri, jadi sirkular — model hanya meniru dirinya. Untuk hasil yang sahih,
+> gunakan `--csv` berisi data yang **dilabeli manual**. Sediakan idealnya
+> ratusan contoh per kelas.
+
 ---
 
 ## 13. Troubleshooting
@@ -368,6 +428,10 @@ Menangani **negasi** (`tidak bagus` → membalik) dan **penguat** (`sangat`,
 | SMOTE "dilewati" | Kelas terkecil punya <2 sampel. Tambah data pada kelas minoritas. |
 | Semua skor F1 = 1.00 | Datanya terlalu seragam/sedikit sehingga mudah ditebak — bukan hasil valid. Perbanyak & ragamkan data. |
 | Stemming tidak jalan | `Sastrawi` belum terpasang: `uv pip install Sastrawi`. |
+| "model lokal tak ditemukan" | Jalankan `python tools/setup_local_models.py` (sekali, ±500 MB). |
+| Kata baru tak ter-stem | Tambahkan kata dasarnya ke `resources/kata_dasar_custom.txt`, lalu jalankan ulang. |
+| Slang tertentu tak dikenali | Tambahkan barisnya ke `resources/slang_baku.csv` (`slang,baku`). |
+| Fine-tuning kehabisan memori | Turunkan `--batch-size` (mis. 8 atau 4). |
 
 ---
 

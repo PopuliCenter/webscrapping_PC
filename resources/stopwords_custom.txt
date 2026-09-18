@@ -1,0 +1,42 @@
+# Stopword tambahan — kata yang DIBUANG sebelum analisis.
+# Satu kata per baris. '#' = komentar.
+#
+# Daftar inti sudah ada di analysis/preprocess.py (STOPWORDS_ID).
+# File ini menambahkannya. Berlaku langsung tanpa training.
+#
+# Tips: isi dengan kata yang sering muncul tapi tak bermakna untuk topikmu.
+# Contoh: kalau memantau berita, kata "baca", "selengkapnya", "detikcom"
+# biasanya hanya noise dari template media.
+
+# ── noise dari template media/RSS ──
+baca
+selengkapnya
+lainnya
+berita
+artikel
+foto
+video
+simak
+klik
+sumber
+redaksi
+wartawan
+editor
+reporter
+liputan
+dilansir
+dikutip
+antara
+detikcom
+kompascom
+
+# ── kata pengisi percakapan ──
+oke
+sip
+mantap
+gitulah
+pokoknya
+intinya
+kira
+soalnya
+makanya

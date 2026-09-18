@@ -1,0 +1,62 @@
+# Kata dasar tambahan untuk stemmer Sastrawi.
+# Satu kata per baris. Baris diawali '#' diabaikan.
+#
+# Kamus bawaan Sastrawi berisi ±29.900 kata. File ini MENAMBAH kata baru
+# yang belum dikenal — istilah baru, singkatan, nama program, bahasa gaul.
+# Perubahan langsung berlaku saat program dijalankan ulang (tanpa training).
+#
+# Contoh efek: tanpa "gibah" -> "menggibah" tetap "menggibah"
+#              dengan "gibah" -> "menggibah" menjadi "gibah"
+
+# ── Istilah/program & singkatan ──
+ikn
+bbm
+pertalite
+pertamax
+bansos
+prakerja
+umkm
+bumn
+apbn
+apbd
+ppn
+pph
+kpk
+mk
+dpr
+mpr
+pemilu
+pilkada
+pilpres
+caleg
+capres
+cawapres
+
+# ── Istilah digital & media sosial ──
+netizen
+warganet
+buzzer
+hoaks
+viral
+konten
+kreator
+gawai
+daring
+luring
+unggah
+unduh
+swafoto
+tagar
+cuitan
+
+# ── Bahasa gaul yang sudah lazim ──
+gibah
+julid
+baper
+mager
+receh
+gercep
+halu
+rebahan
+healing
+skena

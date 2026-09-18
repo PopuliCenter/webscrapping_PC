@@ -91,5 +91,15 @@ sentiment:
   #               ke "lexicon" bila library tak ada.
   # "lexicon"  -> cepat, ringan, tanpa download model.
   engine: "indobert"
+  # Folder model LOKAL. Kosong -> pakai models/indobert-sentiment (default).
+  # Siapkan sekali:  python tools/setup_local_models.py
+  # Setelah fine-tuning, arahkan ke: "models/indobert-sentiment-finetuned"
+  model_dir: ""
   # path opsional ke lexicon InSet (positive.tsv / negative.tsv). Kosong -> pakai bawaan kecil.
   inset_dir: ""
+
+# ── Kamus lokal yang bisa kamu edit (folder resources/) ──────
+#   resources/kata_dasar_custom.txt  -> kata dasar tambahan untuk Sastrawi
+#   resources/slang_baku.csv         -> normalisasi slang -> kata baku
+#   resources/stopwords_custom.txt   -> stopword tambahan
+# Perubahan berlaku langsung tanpa perlu melatih apa pun.

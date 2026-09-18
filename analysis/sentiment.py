@@ -16,6 +16,35 @@ from typing import Tuple
 
 _TOKEN = re.compile(r"[a-zA-Zà-ÿ']+")
 
+# ── Lokasi model IndoBERT ───────────────────────────────────────
+HUB_MODEL = "mdhugol/indonesia-bert-sentiment-classification"
+DEFAULT_MODEL_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "models", "indobert-sentiment")
+
+
+_LABEL_ALIAS = {
+    "label_0": "positive", "label_1": "neutral", "label_2": "negative",
+    "positive": "positive", "neutral": "neutral", "negative": "negative",
+    "positif": "positive", "netral": "neutral", "negatif": "negative",
+    "pos": "positive", "net": "neutral", "neg": "negative",
+}
+
+
+def _map_label(raw: str) -> str:
+    """Terima label model bawaan (LABEL_0/1/2) maupun hasil fine-tuning sendiri."""
+    return _LABEL_ALIAS.get(str(raw).strip().lower(), "neutral")
+
+
+def _is_local_model(path: str) -> bool:
+    """Folder model valid bila berisi config.json + bobot model."""
+    if not path or not os.path.isdir(path):
+        return False
+    if not os.path.isfile(os.path.join(path, "config.json")):
+        return False
+    return any(os.path.isfile(os.path.join(path, f))
+               for f in ("model.safetensors", "pytorch_model.bin"))
+
 # Kamus bawaan minimal (fallback bila InSet tidak ada). Perluas sesuai kebutuhan.
 _POS = {
     "baik", "bagus", "hebat", "mantap", "sukses", "untung", "senang", "puas",
@@ -39,7 +68,7 @@ class SentimentEngine:
         if self.engine == "lexicon":
             self._load_inset((cfg or {}).get("inset_dir", ""))
         elif self.engine == "indobert":
-            self._init_indobert()
+            self._init_indobert((cfg or {}).get("model_dir", ""))
         else:
             print(f"[sentiment] engine '{self.engine}' tak dikenal -> lexicon")
             self.engine = "lexicon"
@@ -75,23 +104,29 @@ class SentimentEngine:
         return label, round(norm, 4)
 
     # ── IndoBERT ─────────────────────────────────────────────
-    def _init_indobert(self):
+    def _init_indobert(self, model_dir: str = ""):
+        """Muat IndoBERT. Prioritas: folder LOKAL -> baru unduh dari HuggingFace.
+
+        Model lokal (models/indobert-sentiment) membuat program jalan tanpa
+        internet dan bisa diganti hasil fine-tuning sendiri.
+        """
+        model_dir = model_dir or DEFAULT_MODEL_DIR
+        sumber = model_dir if _is_local_model(model_dir) else HUB_MODEL
+        if sumber == HUB_MODEL:
+            print(f"[sentiment] model lokal tak ditemukan di '{model_dir}' "
+                  f"-> memakai HuggingFace. Jalankan: python tools/setup_local_models.py")
         try:
             from transformers import pipeline  # type: ignore
-            self._pipe = pipeline(
-                "sentiment-analysis",
-                model="mdhugol/indonesia-bert-sentiment-classification",
-            )
+            self._pipe = pipeline("sentiment-analysis", model=sumber, tokenizer=sumber)
+            self.model_source = sumber
         except Exception as e:
             print(f"[sentiment] IndoBERT gagal dimuat ({e}) -> fallback lexicon")
             self.engine = "lexicon"
 
     def _indobert_predict(self, text: str) -> Tuple[str, float]:
-        # Label model: LABEL_0=positive, LABEL_1=neutral, LABEL_2=negative
-        mapping = {"LABEL_0": "positive", "LABEL_1": "neutral", "LABEL_2": "negative"}
         try:
             out = self._pipe((text or "")[:512])[0]
-            label = mapping.get(out["label"], "neutral")
+            label = _map_label(out["label"])
             conf = float(out["score"])
             signed = conf if label == "positive" else (-conf if label == "negative" else 0.0)
             return label, round(signed, 4)
@@ -99,7 +134,6 @@ class SentimentEngine:
             return self._lexicon_predict(text)
 
     def _indobert_predict_batch(self, texts: list) -> list:
-        mapping = {"LABEL_0": "positive", "LABEL_1": "neutral", "LABEL_2": "negative"}
         clipped = [(t or "")[:512] for t in texts]
         try:
             outs = self._pipe(clipped, batch_size=16, truncation=True)
@@ -107,7 +141,7 @@ class SentimentEngine:
             return [self._lexicon_predict(t) for t in texts]
         res = []
         for out in outs:
-            label = mapping.get(out["label"], "neutral")
+            label = _map_label(out["label"])
             conf = float(out["score"])
             signed = conf if label == "positive" else (-conf if label == "negative" else 0.0)
             res.append((label, round(signed, 4)))

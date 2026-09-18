@@ -26,9 +26,23 @@ from typing import Iterable
 # ── Stemmer Sastrawi (opsional) ─────────────────────────────────
 try:
     from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
+    from Sastrawi.Dictionary.ArrayDictionary import ArrayDictionary
+    from Sastrawi.Stemmer.Stemmer import Stemmer as _SastrawiStemmer
+    from Sastrawi.Stemmer.CachedStemmer import CachedStemmer
+    from Sastrawi.Stemmer.Cache.ArrayCache import ArrayCache
     _HAS_SASTRAWI = True
 except Exception:
     _HAS_SASTRAWI = False
+
+
+# ── Lokasi kamus lokal yang bisa kamu edit sendiri ──────────────
+# <root proyek>/resources/  — dimuat otomatis bila ada.
+RESOURCE_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources")
+
+DEFAULT_SLANG_FILE      = os.path.join(RESOURCE_DIR, "slang_baku.csv")
+DEFAULT_STOPWORD_FILE   = os.path.join(RESOURCE_DIR, "stopwords_custom.txt")
+DEFAULT_KATA_DASAR_FILE = os.path.join(RESOURCE_DIR, "kata_dasar_custom.txt")
 
 
 # ── Pola regex ──────────────────────────────────────────────────
@@ -121,6 +135,11 @@ STOPWORDS_ID = {
     "sebuah", "seorang", "suatu", "satu", "dua", "tiga", "per", "an", "nan",
 }
 
+# PENTING: kata negasi TIDAK boleh dibuang. Menghapusnya membalik makna —
+# "tidak suka" akan menjadi "suka". Karena itu dikeluarkan dari stopword.
+NEGASI_WORDS = {"tidak", "bukan", "tak", "tanpa", "kurang", "belum", "jangan"}
+STOPWORDS_ID -= NEGASI_WORDS
+
 
 def _load_wordlist(path: str) -> set:
     """Muat daftar kata dari file (satu kata per baris). Kosong bila gagal."""
@@ -152,27 +171,50 @@ def _load_slang(path: str) -> dict:
     return out
 
 
+@lru_cache(maxsize=4)
+def _build_stemmer(custom_words: tuple = ()):
+    """Stemmer Sastrawi: kamus bawaan (±29.900 kata) + kata dasar tambahanmu.
+
+    Menambah kata ke resources/kata_dasar_custom.txt langsung berpengaruh —
+    Sastrawi berbasis aturan + kamus, jadi tidak perlu 'melatih' apa pun.
+    """
+    if not _HAS_SASTRAWI:
+        return None
+    try:
+        words = list(StemmerFactory().get_words())
+        if custom_words:
+            words.extend(w for w in custom_words if w)
+        return CachedStemmer(ArrayCache(), _SastrawiStemmer(ArrayDictionary(words)))
+    except Exception:
+        return None
+
+
 class Preprocessor:
     """Pipeline preprocessing Bahasa Indonesia yang bisa dikonfigurasi."""
 
     def __init__(self, remove_stopwords: bool = True, use_stemmer: bool = True,
                  normalize_slang: bool = True, min_token_len: int = 3,
+                 merge_negation: bool = True,
                  stopword_file: str = "", slang_file: str = "",
-                 extra_stopwords: Iterable[str] = ()):
+                 kata_dasar_file: str = "", extra_stopwords: Iterable[str] = ()):
         self.remove_stopwords = remove_stopwords
         self.normalize_slang = normalize_slang
         self.min_token_len = min_token_len
+        self.merge_negation = merge_negation
+
+        # Kamus lokal di resources/ dipakai otomatis bila tak ditentukan manual.
+        stopword_file = stopword_file or DEFAULT_STOPWORD_FILE
+        slang_file = slang_file or DEFAULT_SLANG_FILE
+        kata_dasar_file = kata_dasar_file or DEFAULT_KATA_DASAR_FILE
 
         self.stopwords = set(STOPWORDS_ID) | _load_wordlist(stopword_file) | set(extra_stopwords)
         self.slang = dict(SLANG_BAKU)
         self.slang.update(_load_slang(slang_file))
+        self.kata_dasar_custom = sorted(_load_wordlist(kata_dasar_file))
 
         self._stemmer = None
         if use_stemmer and _HAS_SASTRAWI:
-            try:
-                self._stemmer = StemmerFactory().create_stemmer()
-            except Exception:
-                self._stemmer = None
+            self._stemmer = _build_stemmer(tuple(self.kata_dasar_custom))
         self.stemming_active = self._stemmer is not None
 
     # ── Tahap-tahap ─────────────────────────────────────────────
@@ -221,6 +263,24 @@ class Preprocessor:
             return tokens
         return [_stem_cached(self._stemmer, t) for t in tokens]
 
+    def join_negation(self, tokens: list) -> list:
+        """Satukan negasi dengan kata sesudahnya: ['tidak','suka'] -> ['tidak_suka'].
+
+        Membuat 'tidak_suka' menjadi satu fitur tersendiri bagi TF-IDF, sehingga
+        model bisa membedakannya dari 'suka'.
+        """
+        if not self.merge_negation:
+            return tokens
+        out, i = [], 0
+        while i < len(tokens):
+            if tokens[i] in NEGASI_WORDS and i + 1 < len(tokens):
+                out.append(f"{tokens[i]}_{tokens[i + 1]}")
+                i += 2
+            else:
+                out.append(tokens[i])
+                i += 1
+        return out
+
     # ── API utama ───────────────────────────────────────────────
     def tokens(self, text: str) -> list:
         t = self.cleanse(self.case_fold(text))
@@ -228,6 +288,7 @@ class Preprocessor:
         toks = self.normalize(toks)
         toks = self.filter_stopwords(toks)
         toks = self.stem(toks)
+        toks = self.join_negation(toks)
         return [t for t in toks if len(t) >= self.min_token_len]
 
     def clean(self, text: str) -> str:
@@ -241,6 +302,7 @@ class Preprocessor:
         normalized = self.normalize(tok)
         no_stop = self.filter_stopwords(normalized)
         stemmed = self.stem(no_stop)
+        merged = self.join_negation(stemmed)
         return {
             "0_asli": text,
             "1_case_folding": folded,
@@ -249,6 +311,7 @@ class Preprocessor:
             "4_normalisasi_baku": normalized,
             "5_stopword_removal": no_stop,
             "6_stemming": stemmed,
+            "7_gabung_negasi": merged,
         }
 
 
