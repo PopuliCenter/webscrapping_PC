@@ -37,6 +37,9 @@ torch>=2.2
 # ── Integrasi HuggingFace (dataset berlabel, banding model, emosi) ──
 datasets>=2.19               # unduh dataset berlabel manusia (streaming)
 huggingface_hub>=0.23        # unduh/unggah model
+sentencepiece>=0.2           # tokenizer mDeBERTa (zero-shot intent/intensitas)
+protobuf>=4.25               # dibutuhkan sebagian tokenizer
+scipy>=1.11                  # korelasi Spearman untuk evaluasi intensitas
 
 # ── Dashboard (Fase 3) ────────────────────────────────────────
 streamlit>=1.33

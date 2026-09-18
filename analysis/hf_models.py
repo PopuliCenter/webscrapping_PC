@@ -15,19 +15,23 @@ Pakai:
 """
 from __future__ import annotations
 
+import os
 from typing import Optional
 
+_PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 KANONIK = ("positive", "neutral", "negative")
 
 MODEL_REGISTRY = {
     "mdhugol": {
         "id": "mdhugol/indonesia-bert-sentiment-classification",
+        "lokal": os.path.join(_PROJECT, "models", "indobert-sentiment"),
         # config hanya LABEL_0/1/2 -> WAJIB override (sesuai kartu model)
         "label_override": {"LABEL_0": "positive", "LABEL_1": "neutral", "LABEL_2": "negative"},
         "catatan": "Model yang dipakai proyek ini saat ini.",
     },
     "w11wo": {
         "id": "w11wo/indonesian-roberta-base-sentiment-classifier",
+        "lokal": os.path.join(_PROJECT, "models", "sentimen-w11wo"),
         "label_override": None,          # config sudah jelas
         "catatan": "Paling populer (±102rb unduhan). RoBERTa, 3 kelas.",
     },
@@ -73,6 +77,9 @@ def build_pipeline(kunci_atau_id: str, override: Optional[dict] = None):
 
     cfg = MODEL_REGISTRY.get(kunci_atau_id)
     model_id = cfg["id"] if cfg else kunci_atau_id
+    lokal = (cfg or {}).get("lokal")
+    if lokal and os.path.isfile(os.path.join(lokal, "config.json")):
+        model_id = lokal                     # salinan lokal: jalan tanpa internet
     override = override if override is not None else (cfg or {}).get("label_override")
 
     conf = AutoConfig.from_pretrained(model_id)

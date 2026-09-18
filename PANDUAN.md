@@ -16,7 +16,7 @@ sampai baca hasil di dashboard.
 10. [Menjalankan dengan Docker](#10-menjalankan-dengan-docker)
 11. [Alur kerja harian yang disarankan](#11-alur-kerja-harian-yang-disarankan)
 12. [Analitik lanjutan (preprocessing, bot, word cloud, ML)](#12-analitik-lanjutan)
-13. [Integrasi HuggingFace (dataset, banding model, emosi, Colab)](#13-integrasi-huggingface)
+13. [Integrasi HuggingFace (dataset, banding model, emosi, sarkasme, intent, Colab)](#13-integrasi-huggingface)
 14. [Troubleshooting](#14-troubleshooting)
 
 ---
@@ -371,13 +371,19 @@ Menangani **negasi** (`tidak bagus` → membalik) dan **penguat** (`sangat`,
 
 ### g. Model lokal & melatih ulang
 
-**Simpan IndoBERT ke folder proyek** (sekali saja, ±500 MB) agar tidak
-bergantung internet / cache HuggingFace:
+**Simpan model ke folder proyek** (sekali saja) agar jalan tanpa internet:
 ```powershell
-python tools/setup_local_models.py
+python tools/setup_local_models.py --all     # semua model (±2,5 GB)
+python tools/setup_local_models.py --check   # lihat mana yang sudah ada
 ```
-Model masuk ke `models/indobert-sentiment/`. Folder `models/` sengaja
-di-`.gitignore` karena besar — buat ulang dengan perintah yang sama.
+Pilih sebagian dengan `--sentimen --w11wo --emotion --sarkasme --zeroshot`.
+Folder `models/` sengaja di-`.gitignore` karena besar.
+
+> **Koneksi ke HuggingFace sering terputus?** Pengunduh proyek ini
+> (`tools/unduh_model.py`) mengambil satu berkas per waktu dan **melanjutkan
+> dari byte terakhir** bila putus. Kalau gagal, cukup jalankan ulang perintah
+> yang sama — tidak mulai dari nol. Model lain pun bisa diunduh dengan:
+> `python tools/unduh_model.py <repo_id> models/<nama_folder>`
 
 **Dua cara "melatih" — beda sifatnya:**
 
@@ -393,9 +399,13 @@ asing jadi sub-kata sehingga tetap terbaca. Yang perlu diajarkan adalah
 **makna kata itu dalam kalimat**, lewat fine-tuning:
 
 ```powershell
-# data latih CSV berkolom: text,label   (label: positive/neutral/negative)
-python -m analysis.finetune_indobert --csv data/latih.csv --epochs 3
+python tools/siapkan_data_latih.py              # buat data/latih_20k.csv & data/latih_sarkasme.csv
+python -m analysis.finetune_indobert --tugas sentimen --csv data/latih_20k.csv
+python -m analysis.finetune_indobert --tugas sarkasme --csv data/latih_sarkasme.csv
 ```
+CSV berkolom `text,label` (opsional `split` = train/validation/test).
+Protokolnya: urutan label **mengikuti model dasar**, **bobot kelas** untuk data
+timpang, dan angka akhir dari data **uji** yang tak pernah dilihat saat latihan.
 Hasil disimpan ke `models/indobert-sentiment-finetuned/` (model asli tidak
 ditimpa). Pakai dengan mengubah `config.yaml`:
 ```yaml
@@ -478,14 +488,27 @@ marah terbanyak.
 
 ### d. Melatih di GPU gratis (Colab)
 
-Melatih di CPU laptop lambat. Untuk data ribuan, pakai
-[`notebooks/finetune_colab.ipynb`](notebooks/finetune_colab.ipynb):
+Melatih di CPU laptop lambat. [`notebooks/finetune_colab.ipynb`](notebooks/finetune_colab.ipynb)
+melatih **sentimen** atau **sarkasme** di GPU gratis — pilih lewat `TUGAS`:
+
+| `TUGAS` | Data | Model dasar | Hasil ke folder |
+|---|---|---|---|
+| `"sentimen"` | 21.000 berlabel manusia (seimbang) | `w11wo` (pemenang uji banding) | `models/indobert-sentiment-finetuned/` |
+| `"sarkasme"` | 2.684 tweet, split resmi | IndoBERTweet | `models/sarkasme-finetuned/` |
 
 1. Buka [Google Colab](https://colab.research.google.com/) → `File > Upload notebook`
 2. `Runtime > Change runtime type > GPU`
-3. Jalankan sel dari atas ke bawah
-4. Unduh hasilnya, ekstrak ke `models/indobert-sentiment-finetuned/`
-5. Set `config.yaml → sentiment.model_dir`
+3. Set `TUGAS`, lalu `Runtime > Run all` — data diunduh otomatis
+   (atau `SUMBER_DATA = "upload"` untuk CSV dari `data/`)
+4. Unduh zip hasilnya, ekstrak ke folder di tabel
+5. Sentimen: set `config.yaml → sentiment.model_dir`. Sarkasme: otomatis dipakai.
+
+**Pembanding sarkasme:** model jadi `w11wo` mencapai **F1 0,7273** pada 538
+tweet uji resmi (sudah diverifikasi ulang, cocok persis dengan angka resmi).
+Hasil latihmu layak dipakai bila menyamai atau melampauinya.
+
+Notebook dibuat oleh `tools/buat_notebook_colab.py` — ubah skrip itu, bukan
+notebook-nya langsung, lalu jalankan ulang.
 
 ### e. Unggah model ke HuggingFace Hub
 
@@ -501,6 +524,54 @@ Tanpa `--yes` skrip hanya menampilkan rencana, tidak mengirim apa pun.
 
 > Periksa data latihmu dulu: bobot model bisa menghafal potongan data, jadi
 > jangan unggah model yang dilatih dari data pribadi/sensitif.
+
+### f. Sarkasme, intent & intensitas 5 tingkat (tab 🎯 Intent & Sarkasme)
+
+Lapisan di atas sentimen biasa. Siapkan modelnya sekali:
+```powershell
+python tools/setup_local_models.py --sarkasme --zeroshot --w11wo
+```
+Lalu klik tombol di tab **🎯 Intent & Sarkasme**, atau lewat terminal:
+```powershell
+python -m analysis.sarcasm              # coba pada contoh
+python -m analysis.sarcasm --ambang     # pilih ambang (validasi) & laporkan (uji)
+python -m analysis.zeroshot             # coba intent pada contoh
+python -m analysis.zeroshot --kalibrasi # kalibrasi ulang ambang 5 tingkat
+```
+
+**Seberapa bisa dipercaya — semua diukur, bukan diklaim:**
+
+| Fitur | Cara | Hasil terukur | Catatan |
+|---|---|---|---|
+| **Sarkasme** | model jadi `w11wo` (IndoBERT, dilatih dari tweet) | F1 **0,727**, presisi 0,74 — 538 tweet uji resmi | ±1 dari 4 tanda "sarkas" keliru |
+| **Intensitas 5 tingkat** | selisih logit `w11wo`, ambang dikalibrasi | tepat **65,5%**, meleset ≤1 tingkat **88,7%**, Spearman 0,82 — 600 ulasan uji PRDECT-ID | tingkat tengah (2–4) paling sulit |
+| **Intent** | zero-shot mDeBERTa, 7 kategori | **belum bisa diukur** | tak ada data berlabel yang relevan |
+
+**Hal yang perlu kamu tahu:**
+
+- **Label model sarkasme dibuktikan, bukan ditebak.** Config-nya hanya
+  `LABEL_0/1`. Diuji dua kemungkinan pada data uji: `LABEL_1 = sarkas` → F1 0,727;
+  kebalikannya → F1 0,140. Hasilnya cocok persis dengan angka resmi pembuatnya.
+- **Sarkasme cenderung salah mencap keluhan tulus.** Contoh: *"jalan di depan
+  rumah rusak, mohon segera diperbaiki"* terbaca sarkas (0,888). Menaikkan ambang
+  hampir tak membantu — dari 0,5 ke 0,99 presisi hanya naik 0,74 → 0,81, dan tak
+  ada ambang yang mencapai 0,85. Kesalahannya "yakin", jadi obatnya **melatih
+  ulang dengan contoh keluhan vs sarkasme dari datamu** (notebook Colab,
+  `TUGAS = "sarkasme"`). Ambang aktif 0,9 (dipilih di data validasi) tersimpan di
+  `resources/ambang_sarkasme.json`.
+- Kolom **"Sarkas tapi dilabeli POSITIF"** di dashboard adalah daftar paling
+  berguna: pujian yang sebenarnya sindiran — sentimennya kemungkinan terbalik.
+- **Intent = indikasi, bukan kepastian.** Pada 7 contoh jelas yang ditulis
+  manual, 5 sesuai; skor keyakinan umumnya rendah (0,37–0,57). "Kritik" dan
+  "keluhan" sering tertukar. Zero-shot juga **lambat di CPU** (tiap teks diuji
+  terhadap 7 hipotesis) — batasi jumlah dokumen atau jalankan di GPU.
+- **Kenapa intensitas tidak memakai zero-shot?** Sudah diuji pada data yang sama:
+  zero-shot hanya **17,2%** tepat (di bawah tebak acak 20%) walau arahnya benar
+  (Spearman 0,82 — sama dengan polaritas). Ia menghindari label "sangat …" dan
+  memilih tingkat tengah. Polaritas terkalibrasi: **65,5%**.
+- **Intensitas diukur dengan rating bintang ulasan produk** sebagai pendekatan.
+  Ulasan produk ≠ opini politik; ambangnya bisa dikalibrasi ulang bila kamu punya
+  data berlabel 5 tingkat dari topikmu sendiri.
 
 ---
 

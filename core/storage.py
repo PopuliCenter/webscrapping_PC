@@ -29,7 +29,13 @@ CREATE TABLE IF NOT EXISTS documents (
     sentiment_label  TEXT,
     sentiment_score  REAL,
     emotion_label    TEXT,
-    emotion_score    REAL
+    emotion_score    REAL,
+    intent_label     TEXT,
+    intent_score     REAL,
+    intensitas_label TEXT,
+    intensitas_score REAL,
+    sarkasme_label   TEXT,
+    sarkasme_score   REAL
 );
 CREATE INDEX IF NOT EXISTS idx_docs_platform   ON documents(platform);
 CREATE INDEX IF NOT EXISTS idx_docs_published  ON documents(published_at);
@@ -49,6 +55,15 @@ CREATE INDEX IF NOT EXISTS idx_edge_platform ON interactions(platform);
 """
 
 
+# Kolom hasil analisis tambahan. Database lama otomatis ditambah kolom ini.
+KOLOM_ANALISIS = {
+    "emotion_label": "TEXT", "emotion_score": "REAL",
+    "intent_label": "TEXT", "intent_score": "REAL",
+    "intensitas_label": "TEXT", "intensitas_score": "REAL",
+    "sarkasme_label": "TEXT", "sarkasme_score": "REAL",
+}
+
+
 class Storage:
     def __init__(self, db_path: str):
         os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
@@ -61,7 +76,7 @@ class Storage:
     def _migrate(c):
         """Tambah kolom baru pada database lama tanpa kehilangan data."""
         ada = {r[1] for r in c.execute("PRAGMA table_info(documents)").fetchall()}
-        for kolom, tipe in (("emotion_label", "TEXT"), ("emotion_score", "REAL")):
+        for kolom, tipe in KOLOM_ANALISIS.items():
             if kolom not in ada:
                 c.execute(f"ALTER TABLE documents ADD COLUMN {kolom} {tipe}")
 
@@ -123,6 +138,26 @@ class Storage:
                 "UPDATE documents SET emotion_label=?, emotion_score=? WHERE doc_id=?",
                 (label, score, doc_id),
             )
+
+    def docs_without_field(self, field: str, limit: int = 500):
+        """Dokumen yang kolom analisis `field` masih kosong."""
+        if field not in KOLOM_ANALISIS:
+            raise ValueError(f"Kolom tidak dikenal: {field}")
+        with self._conn() as c:
+            cur = c.execute(
+                f"SELECT doc_id, title, content FROM documents "
+                f"WHERE {field} IS NULL OR {field} = '' LIMIT ?", (limit,))
+            return [dict(r) for r in cur.fetchall()]
+
+    def update_fields(self, doc_id: str, **fields):
+        """Isi beberapa kolom analisis sekaligus (nama kolom divalidasi)."""
+        fields = {k: v for k, v in fields.items() if k in KOLOM_ANALISIS}
+        if not fields:
+            return
+        sets = ", ".join(f"{k}=?" for k in fields)
+        with self._conn() as c:
+            c.execute(f"UPDATE documents SET {sets} WHERE doc_id=?",
+                      (*fields.values(), doc_id))
 
     def save_interactions(self, edges: list) -> int:
         """Simpan edge interaksi (mention/retweet/reply/quote) untuk SNA."""

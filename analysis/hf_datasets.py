@@ -154,6 +154,67 @@ def gabung_dengan_db(teks: list, label: list, db_path: str,
     return list(teks) + list(t2), list(label) + list(l2)
 
 
+
+# ════════════════════════════════════════════════════════════════
+#  Dataset TUGAS LAIN (bukan sentimen) — split resmi DIPERTAHANKAN
+# ════════════════════════════════════════════════════════════════
+# Split resmi (train/validation/test) sengaja tidak diacak ulang: kalau
+# digabung lalu dibagi sendiri, hasil uji tak bisa dibandingkan dengan
+# penelitian lain dan rawan bocor.
+TASK_REGISTRY = {
+    "sarkasme": {
+        "id": "w11wo/twitter_indonesia_sarcastic",
+        "text_col": "tweet",
+        "label_col": "label",
+        # terverifikasi dari kartu dataset: 0 = non-sarcastic, 1 = sarcastic
+        "label_map": {0: "bukan_sarkas", 1: "sarkas"},
+        "splits": ("train", "validation", "test"),
+        "baris": {"train": 1878, "validation": 268, "test": 538},
+        "catatan": "Twitter. Tidak seimbang (~1 sarkas : 3 bukan) -> butuh bobot kelas.",
+    },
+}
+
+
+def load_task(kunci: str) -> dict:
+    """Muat semua split resmi sebuah tugas -> {split: (teks, label)}."""
+    if kunci not in TASK_REGISTRY:
+        raise ValueError(f"Tugas '{kunci}' tidak dikenal. Pilihan: {list(TASK_REGISTRY)}")
+    cfg = TASK_REGISTRY[kunci]
+    try:
+        from datasets import load_dataset
+    except Exception:
+        raise RuntimeError("Library 'datasets' belum terpasang: uv pip install datasets")
+
+    hasil = {}
+    for split in cfg["splits"]:
+        ds = load_dataset(cfg["id"], split=split)
+        teks, label = [], []
+        for row in ds:
+            t = (row.get(cfg["text_col"]) or "").strip()
+            l = cfg["label_map"].get(row.get(cfg["label_col"]))
+            if t and l:
+                teks.append(t)
+                label.append(l)
+        hasil[split] = (teks, label)
+        print(f"[hf] {kunci}/{split}: {len(teks)} — {dict(Counter(label))}")
+    return hasil
+
+
+def simpan_csv_split(data_split: dict, path: str) -> str:
+    """Simpan {split: (teks, label)} jadi satu CSV berkolom text,label,split."""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    n = 0
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["text", "label", "split"])
+        for split, (teks, label) in data_split.items():
+            for t, l in zip(teks, label):
+                w.writerow([t, l, split])
+                n += 1
+    print(f"[hf] disimpan ke {path} ({n} baris)")
+    return path
+
+
 if __name__ == "__main__":
     print("Dataset siap pakai:\n")
     for d in list_sumber():

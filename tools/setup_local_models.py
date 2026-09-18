@@ -1,28 +1,44 @@
-"""Unduh IndoBERT SEKALI lalu simpan ke folder lokal proyek.
+"""Simpan model ke folder lokal proyek — SEKALI, lalu jalan tanpa internet.
 
-Setelah ini, program memakai model dari `models/indobert-sentiment/` —
-tidak lagi bergantung cache HuggingFace atau koneksi internet, dan folder
-itu bisa diganti dengan hasil fine-tuning sendiri.
+Memakai tools/unduh_model.py (satu berkas per waktu + RESUME bila koneksi
+putus), karena koneksi ke huggingface.co dari jaringan ini sering diputus dan
+pengunduh bawaan kadang menggantung.
 
 Jalankan:
-    python tools/setup_local_models.py            # unduh model sentimen
-    python tools/setup_local_models.py --emotion  # + model emosi
-    python tools/setup_local_models.py --all      # keduanya
-    python tools/setup_local_models.py --check    # cek status saja
+    python tools/setup_local_models.py              # model sentimen (bawaan)
+    python tools/setup_local_models.py --all        # semua model
+    python tools/setup_local_models.py --emotion --sarkasme   # pilih sebagian
+    python tools/setup_local_models.py --check      # cek status saja
+
+Pilihan: --sentimen --w11wo --emotion --sarkasme --zeroshot --all
 """
 from __future__ import annotations
 
 import os
-import shutil
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from analysis.sentiment import HUB_MODEL, DEFAULT_MODEL_DIR, _is_local_model  # noqa: E402
 from analysis.emotion import (HUB_MODEL as EMO_HUB,                          # noqa: E402
                               DEFAULT_MODEL_DIR as EMO_DIR)
-from analysis.preprocess import (RESOURCE_DIR, DEFAULT_KATA_DASAR_FILE,      # noqa: E402
-                                 DEFAULT_SLANG_FILE, DEFAULT_STOPWORD_FILE,
-                                 Preprocessor)
+from analysis.sarcasm import HUB_MODEL as SARKAS_HUB, DIR_W11WO as SARKAS_DIR  # noqa: E402
+from analysis.zeroshot import ZS_MODELS, ZS_LOKAL                             # noqa: E402
+from analysis.hf_models import MODEL_REGISTRY                                # noqa: E402
+from analysis.preprocess import (DEFAULT_KATA_DASAR_FILE, DEFAULT_SLANG_FILE,  # noqa: E402
+                                 DEFAULT_STOPWORD_FILE, Preprocessor)
+from tools.unduh_model import unduh_model                                    # noqa: E402
+
+# (bendera, nama, repo HF, folder lokal, dipakai oleh)
+MODELS = [
+    ("--sentimen", "sentimen (mdhugol)", HUB_MODEL, DEFAULT_MODEL_DIR,
+     "analisis sentimen utama"),
+    ("--w11wo", "sentimen (w11wo)", MODEL_REGISTRY["w11wo"]["id"],
+     MODEL_REGISTRY["w11wo"]["lokal"], "intensitas 5 tingkat + pembanding"),
+    ("--emotion", "emosi", EMO_HUB, EMO_DIR, "tab Emosi"),
+    ("--sarkasme", "sarkasme", SARKAS_HUB, SARKAS_DIR, "tab Intent & Sarkasme"),
+    ("--zeroshot", "zero-shot (mDeBERTa)", ZS_MODELS["mdeberta"], ZS_LOKAL["mdeberta"],
+     "intent zero-shot"),
+]
 
 
 def _ukuran(path: str) -> str:
@@ -32,73 +48,38 @@ def _ukuran(path: str) -> str:
 
 
 def status():
-    print("── Status aset lokal ──")
-    ok_model = _is_local_model(DEFAULT_MODEL_DIR)
-    print(f"IndoBERT sentimen: {'ADA' if ok_model else 'BELUM'}  ({DEFAULT_MODEL_DIR})")
-    if ok_model:
-        print(f"                   ukuran {_ukuran(DEFAULT_MODEL_DIR)}")
-    ok_emo = _is_local_model(EMO_DIR)
-    print(f"Model emosi      : {'ADA' if ok_emo else 'BELUM'}  ({EMO_DIR})")
-    if ok_emo:
-        print(f"                   ukuran {_ukuran(EMO_DIR)}")
+    print("── Model lokal ──")
+    for bendera, nama, _, folder, guna in MODELS:
+        ada = _is_local_model(folder)
+        ukuran = f" {_ukuran(folder):>7}" if ada else ""
+        print(f"  {'✓' if ada else '·'} {nama:<22}{ukuran}  [{bendera}]  — {guna}")
 
+    print("── Kamus lokal ──")
     for label, path in (("kata dasar", DEFAULT_KATA_DASAR_FILE),
                         ("slang→baku", DEFAULT_SLANG_FILE),
-                        ("stopword  ", DEFAULT_STOPWORD_FILE)):
-        ada = os.path.isfile(path)
-        print(f"Kamus {label}: {'ADA' if ada else 'BELUM'}  ({path})")
-
+                        ("stopword", DEFAULT_STOPWORD_FILE)):
+        print(f"  {'✓' if os.path.isfile(path) else '·'} {label}")
     p = Preprocessor()
-    print(f"Stemmer Sastrawi aktif: {p.stemming_active} "
-          f"(+{len(p.kata_dasar_custom)} kata dasar tambahan)")
-    print(f"Kamus slang termuat   : {len(p.slang)} entri")
-    print(f"Stopword termuat      : {len(p.stopwords)} kata")
-    return ok_model
-
-
-def unduh(hub_id: str, target_dir: str, nama: str) -> bool:
-    try:
-        from transformers import AutoTokenizer, AutoModelForSequenceClassification
-    except Exception:
-        print("ERROR: transformers belum terpasang. Jalankan:")
-        print("  uv pip install transformers torch")
-        return False
-
-    if _is_local_model(target_dir):
-        print(f"[{nama}] sudah ada di {target_dir} — dilewati "
-              f"(hapus foldernya bila ingin unduh ulang).")
-        return True
-
-    os.makedirs(target_dir, exist_ok=True)
-    print(f"[{nama}] mengunduh '{hub_id}' (~500 MB, sekali saja)...")
-    try:
-        tok = AutoTokenizer.from_pretrained(hub_id)
-        mdl = AutoModelForSequenceClassification.from_pretrained(hub_id)
-        tok.save_pretrained(target_dir)
-        mdl.save_pretrained(target_dir)
-    except Exception as e:
-        print(f"[{nama}] GAGAL: {e}")
-        shutil.rmtree(target_dir, ignore_errors=True)
-        return False
-
-    print(f"[{nama}] selesai -> {target_dir} ({_ukuran(target_dir)})")
-    return True
+    print(f"  Sastrawi aktif: {p.stemming_active} (+{len(p.kata_dasar_custom)} kata dasar), "
+          f"slang {len(p.slang)}, stopword {len(p.stopwords)}")
 
 
 def main():
-    os.makedirs(RESOURCE_DIR, exist_ok=True)
     if "--check" in sys.argv:
         status()
         return
-
-    semua = "--all" in sys.argv
-    hanya_emosi = "--emotion" in sys.argv and not semua
-
-    if not hanya_emosi:
-        unduh(HUB_MODEL, DEFAULT_MODEL_DIR, "sentimen")
-    if hanya_emosi or semua or "--emotion" in sys.argv:
-        unduh(EMO_HUB, EMO_DIR, "emosi")
-
+    dipilih = [m for m in MODELS if "--all" in sys.argv or m[0] in sys.argv]
+    if not dipilih:                                    # bawaan: sentimen saja
+        dipilih = [MODELS[0]]
+    for bendera, nama, repo, folder, _ in dipilih:
+        if _is_local_model(folder):
+            print(f"[{nama}] sudah ada — dilewati")
+            continue
+        print(f"[{nama}]")
+        try:
+            unduh_model(repo, folder)
+        except Exception as e:
+            print(f"[{nama}] GAGAL: {e} — jalankan ulang, unduhan akan dilanjutkan.")
     print()
     status()
 

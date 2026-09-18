@@ -2,7 +2,7 @@
 
 Tab:
   Ringkasan · Topik · Teks & Word Cloud · Heatmap · Jaringan (SNA) ·
-  Bot/Buzzer · Klasifikasi ML
+  Bot/Buzzer · Klasifikasi ML · Emosi · Intent & Sarkasme · Banding Model
 
 Jalankan:
     streamlit run dashboard/app.py
@@ -89,10 +89,10 @@ f = df[df["platform"].isin(sel_plat) & df["sentiment_label"].isin(sel_sent)]
 teks_terpilih = tuple(f["teks"].dropna().tolist())
 
 (tab_ring, tab_topik, tab_teks, tab_heat, tab_sna, tab_bot, tab_ml,
- tab_emo, tab_hf) = st.tabs(
+ tab_emo, tab_nuansa, tab_hf) = st.tabs(
     ["📊 Ringkasan", "📈 Topik", "☁️ Teks & Word Cloud", "🔥 Heatmap",
      "🕸️ Jaringan", "🤖 Bot/Buzzer", "🧪 Klasifikasi ML",
-     "😠 Emosi", "🔬 Banding Model"])
+     "😠 Emosi", "🎯 Intent & Sarkasme", "🔬 Banding Model"])
 
 
 # ── TAB 1: Ringkasan ────────────────────────────────────────────
@@ -502,6 +502,87 @@ with tab_emo:
                          width="stretch")
         else:
             st.caption("Tidak ada dokumen berlabel 'marah' pada filter ini.")
+
+
+# ── TAB: Intent · Intensitas · Sarkasme ─────────────────────────
+def _terisi(kolom):
+    return (kolom in f.columns and f[kolom].notna().any() and
+            (f[kolom].astype(str).str.len() > 0).any())
+
+
+with tab_nuansa:
+    st.subheader("🎯 Intent, intensitas & sarkasme")
+    st.caption("Lapisan di atas sentimen: APA tujuan orang menulis (intent), SEBERAPA "
+               "kuat sikapnya (5 tingkat), dan apakah ia SARKAS — pujian yang "
+               "sebenarnya sindiran bisa membalik makna sentimen.")
+
+    b1, b2, b3 = st.columns(3)
+    jalankan = None
+    if b1.button("Analisis intent (zero-shot)"):
+        jalankan = ("intent",)
+    if b2.button("Analisis intensitas 5 tingkat"):
+        jalankan = ("intensitas",)
+    if b3.button("Deteksi sarkasme"):
+        jalankan = ("sarkasme",)
+
+    if jalankan:
+        with st.spinner("Menganalisis... (model diunduh sekali bila belum ada)"):
+            try:
+                if jalankan == ("sarkasme",):
+                    from analysis.sarcasm import analisis_db as sarkas_db
+                    n = sarkas_db(_db_path(), limit=2000)
+                else:
+                    from analysis.zeroshot import analisis_db as zs_db
+                    n = zs_db(_db_path(), tugas=jalankan, limit=500).get(jalankan[0], 0)
+                st.success(f"{n} dokumen dianalisis.")
+            except Exception as e:
+                st.error(f"Gagal: {e}")
+        load_docs.clear()
+        st.rerun()
+
+    st.info("Akurasi terukur: **sarkasme** F1 0,727 (538 tweet uji resmi) · "
+            "**intensitas** tepat 65,5% / meleset ≤1 tingkat 88,7% (PRDECT-ID). "
+            "**Intent belum bisa diukur** — belum ada data berlabel yang relevan; "
+            "anggap sebagai indikasi, bukan kepastian.")
+
+    k1, k2 = st.columns(2)
+    with k1:
+        st.markdown("**Intent**")
+        if _terisi("intent_label"):
+            st.bar_chart(f["intent_label"].replace("", pd.NA).dropna().value_counts())
+        else:
+            st.caption("Belum dianalisis.")
+    with k2:
+        st.markdown("**Intensitas (5 tingkat)**")
+        if _terisi("intensitas_label"):
+            urutan = ["sangat negatif", "negatif", "netral", "positif", "sangat positif"]
+            st.bar_chart(f["intensitas_label"].value_counts().reindex(urutan).fillna(0))
+        else:
+            st.caption("Belum dianalisis. Pastikan ambang sudah dikalibrasi: "
+                       "`python -m analysis.zeroshot --kalibrasi`")
+
+    if _terisi("intent_label"):
+        st.markdown("**Intent × Sentimen**")
+        fi = f[f["intent_label"].astype(str).str.len() > 0]
+        draw_heatmap(fi.pivot_table(index="intent_label", columns="sentiment_label",
+                                    values="doc_id", aggfunc="count", fill_value=0),
+                     "Jumlah dokumen per intent dan sentimen")
+
+    if _terisi("sarkasme_label"):
+        fs = f[f["sarkasme_label"].astype(str).str.len() > 0]
+        sarkas = fs[fs["sarkasme_label"] == "sarkas"]
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Dokumen dicek", len(fs))
+        m2.metric("Terdeteksi sarkas", len(sarkas))
+        m3.metric("Proporsi", f"{len(sarkas) / max(len(fs), 1):.0%}")
+        st.markdown("**Sarkas tapi dilabeli POSITIF** — kandidat salah baca sentimen")
+        curiga = sarkas[sarkas["sentiment_label"] == "positive"]
+        if not curiga.empty:
+            st.dataframe(curiga[["source", "teks", "sarkasme_score"]]
+                         .sort_values("sarkasme_score", ascending=False).head(20),
+                         width="stretch")
+        else:
+            st.caption("Tidak ada.")
 
 
 # ── TAB 9: Banding model HuggingFace ────────────────────────────

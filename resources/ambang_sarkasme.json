@@ -1,0 +1,11 @@
+{
+  "ambang": 0.9,
+  "pilihan_presisi_tinggi": null,
+  "dipilih_dari": "split validasi",
+  "hasil_uji_seimbang": {
+    "presisi": 0.7561,
+    "recall": 0.694,
+    "f1": 0.7237
+  },
+  "hasil_uji_presisi_tinggi": null
+}

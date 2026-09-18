@@ -21,6 +21,7 @@ pendekatan [Drone Emprit](https://pers.droneemprit.id/). Dirancang untuk
 | **Preprocessing Bahasa Indonesia** | Hapus URL/mention/emoji/angka, normalisasi kata baku (slang→baku), stopword ID, **stemming Sastrawi**, penanganan **negasi** (`tidak bagus`→`tidak_bagus`), near-duplicate |
 | **Kamus & model lokal** | Kamus di `resources/` bisa diedit (berlaku seketika); IndoBERT disimpan lokal di `models/` dan **bisa di-fine-tune** dengan data sendiri |
 | **Integrasi HuggingFace** | Dataset **berlabel manusia** (1 jt+ baris), **banding antar-model** dengan pemetaan label aman, **analisis emosi** (marah/takut/sedih/senang/cinta), unggah ke Hub + notebook Colab GPU |
+| **Sarkasme, intent & intensitas** | Deteksi **sarkasme** (F1 0,727 pada uji resmi), **intent** zero-shot (keluhan/pertanyaan/saran/dukungan/kritik/informasi/ajakan), sentimen **5 tingkat** terkalibrasi (tepat 65,5%, meleset ≤1 tingkat 88,7%) |
 | **Sentimen Bahasa Indonesia** | IndoBERT (default, akurat) + lexicon + **penilaian per-kata** (negasi & penguat, bisa diaudit) |
 | **Klasifikasi ML** | TF-IDF + **SMOTE**, 6 algoritma (LogReg, Decision Tree, Random Forest, SVM, KNN, Naive Bayes), metrik **before vs after** |
 | **Deteksi bot / buzzer** | Skor heuristik perilaku + deteksi **posting serentak** (coordinated behavior) |
@@ -28,7 +29,7 @@ pendekatan [Drone Emprit](https://pers.droneemprit.id/). Dirancang untuk
 | **SNA** | Graf interaksi mention/retweet/quote → top aktor, betweenness, komunitas (Louvain) |
 | **Anti rate-limit** | Rotasi akun, cache sesi, proxy, backoff (jalur gratis) + fallback layanan berbayar |
 | **Monitoring berkelanjutan** | Scheduler per-platform dengan interval terpisah |
-| **Dashboard** | Streamlit 7 tab: ringkasan, tren per topik, word cloud, **heatmap**, jaringan, bot/buzzer, klasifikasi ML |
+| **Dashboard** | Streamlit 10 tab: ringkasan, tren per topik, word cloud, **heatmap**, jaringan, bot/buzzer, klasifikasi ML, emosi, **intent & sarkasme**, banding model |
 | **Skema seragam** | Semua platform → satu tabel; SQLite, mudah migrasi ke PostgreSQL |
 
 ## 🏗️ Arsitektur
@@ -158,11 +159,17 @@ analysis/    sentiment.py · sna.py             # sentimen + SNA
              finetune_indobert.py             # latih ulang IndoBERT (data berlabel)
              hf_datasets.py · hf_models.py    # dataset berlabel HF + banding model
              emotion.py                       # emosi: marah/takut/sedih/senang/cinta
-notebooks/   finetune_colab.ipynb             # latih dgn GPU gratis (Google Colab)
+             sarcasm.py                       # deteksi sarkasme (label terverifikasi)
+             zeroshot.py                      # intent zero-shot + intensitas 5 tingkat
+             compare_labeling.py              # uji metode pelabelan vs label manusia
+notebooks/   finetune_colab.ipynb             # latih sentimen/sarkasme dgn GPU gratis
 resources/   kata_dasar_custom.txt · slang_baku.csv · stopwords_custom.txt
              # kamus lokal — edit bebas, berlaku langsung tanpa training
 tools/       setup_local_models.py            # simpan model ke models/ (lokal)
              push_to_hub.py                   # unggah model ke HF (privat, perlu --yes)
+             unduh_model.py                   # unduh model tahan-putus (resume)
+             siapkan_data_latih.py            # CSV latih sentimen & sarkasme
+             buat_notebook_colab.py           # pembangkit notebook Colab
 models/      (gitignored) model IndoBERT lokal & hasil fine-tuning
 dashboard/   app.py                            # Streamlit
 run_once.py · scheduler.py                     # runner
@@ -178,7 +185,8 @@ secrets/     *.yaml.example                    # template kredensial (gitignored
 - [ ] Migrasi PostgreSQL untuk skala besar
 - [x] Fase 5 — Preprocessing ID, deteksi bot/buzzer, word cloud, heatmap, klasifikasi SMOTE
 - [x] Fase 6 — Integrasi HuggingFace: dataset berlabel, banding model, emosi, Colab GPU
-- [ ] Topic modeling (LDA / BERTopic), NER, peta geografis, ekspor laporan PDF/Excel
+- [x] Fase 7 — Sarkasme, intent zero-shot, sentimen 5 tingkat, fine-tuning multi-tugas
+- [ ] Topic modeling (LDA / BERTopic), NER, ABSA dengan aspek sendiri, ekspor laporan PDF/Excel
 - [ ] Alert otomatis (lonjakan negatif)
 
 ## ⚖️ Etika & Legal
