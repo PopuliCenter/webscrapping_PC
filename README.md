@@ -27,7 +27,7 @@ pendekatan [Drone Emprit](https://pers.droneemprit.id/). Dirancang untuk
 | **Deteksi bot / buzzer** | Skor heuristik perilaku + deteksi **posting serentak** (coordinated behavior) |
 | **Text mining** | Frekuensi kata, n-gram, kata khas per kelompok, **word cloud** |
 | **SNA** | Graf interaksi mention/retweet/quote → top aktor, betweenness, komunitas (Louvain) |
-| **Anti rate-limit** | Rotasi akun, cache sesi, proxy, backoff (jalur gratis) + fallback layanan berbayar |
+| **Anti rate-limit** | Rotasi akun (X & IG), cache sesi, proxy, **istirahat akun** setelah kena limit, **batas harian**, + fallback layanan berbayar |
 | **Monitoring berkelanjutan** | Scheduler per-platform dengan interval terpisah |
 | **Dashboard** | Streamlit 10 tab: ringkasan, tren per topik, word cloud, **heatmap**, jaringan, bot/buzzer, klasifikasi ML, emosi, **intent & sarkasme**, banding model |
 | **Skema seragam** | Semua platform → satu tabel; SQLite, mudah migrasi ke PostgreSQL |
@@ -118,6 +118,7 @@ pip install instaloader
 cp secrets/ig_accounts.yaml.example secrets/ig_accounts.yaml   # akun cadangan
 ```
 IG sangat membatasi: pakai akun cadangan, `posts_per_tag` kecil, jeda besar.
+Boleh isi beberapa akun — dipakai bergantian, yang kena limit diistirahatkan.
 </details>
 
 <details>
@@ -174,6 +175,7 @@ core/        models.py · storage.py            # skema seragam + SQLite
 collectors/  base.py · news_rss · news_gdelt   # berita
              x_twikit · x_service · x_collect   # X (gratis/berbayar/auto)
              instagram · facebook               # IG + importer FB
+             kuota.py                           # istirahat akun + batas harian
 analysis/    sentiment.py · sna.py             # sentimen + SNA
              preprocess.py · textstats.py     # preprocessing ID + frekuensi kata
              lexicon_id.py · bot_detect.py    # skor per-kata + deteksi buzzer

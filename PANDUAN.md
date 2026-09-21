@@ -183,6 +183,15 @@ apa pun — persis saat yang paling rawan bila dipaksa. Pesannya menyebut sisa
 waktunya, mis. `semua akun masih istirahat (~10.0 menit lagi) -> dilewati`.
 Hapus `data/x_cooldown.json` bila ingin mengabaikan catatan itu.
 
+**Batas harian.** Rem kedua: berapa banyak yang boleh ditarik per hari.
+```yaml
+x:
+  daily_limit: 300        # 0 = tanpa batas
+  quota_file: "data/kuota_harian.json"
+```
+Jatah dipotong lintas query dan lintas siklus scheduler, jadi 300 itu total
+sehari — bukan per query. Hitungan otomatis kembali nol saat ganti tanggal.
+
 ### Jalur berbayar (Apify)
 ```powershell
 setx APIFY_TOKEN "apify_xxxxx"        # Windows (buka terminal baru setelah ini)
@@ -208,6 +217,21 @@ Lalu di `config.yaml → x.method: "service"` atau `"auto"`.
    ```
 > IG sangat agresif membatasi. Pakai `posts_per_tag` kecil, jeda besar
 > (`min_delay_sec`/`max_delay_sec`), dan akun cadangan.
+
+**Rotasi akun, istirahat & batas harian** (sama seperti X, tapi lebih hati-hati):
+```yaml
+instagram:
+  accounts_file: "secrets/ig_accounts.yaml"   # boleh berisi BANYAK akun
+  cooldown_minutes: 60    # IG lebih galak -> istirahat lebih lama dari X
+  cooldown_file: "data/ig_cooldown.json"
+  daily_limit: 100        # 0 = tanpa batas
+  quota_file: "data/kuota_harian.json"
+```
+Semua akun di `secrets/ig_accounts.yaml` dipakai bergantian (sebelumnya hanya
+akun pertama). Akun yang dibatasi IG — atau yang gagal login — diistirahatkan
+lalu diganti akun berikutnya. Tagar yang sedang diproses saat limit muncul
+**dilewati**, tidak diulang dengan akun lain: mengulang langsung dari IP yang
+sama justru memancing blokir lebih keras.
 
 ---
 

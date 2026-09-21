@@ -17,7 +17,6 @@ twikit asinkron -> dijalankan via asyncio.run() di x_collect.py.
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import random
 import time
@@ -27,6 +26,8 @@ import yaml
 
 from core.models import Document
 from .base import build_edges, extract_mentions, clean_text
+from .kuota import (akun_tersedia, catat_kuota, istirahatkan, muat_json,
+                    sisa_istirahat, sisa_kuota)
 
 try:
     from twikit import Client
@@ -108,43 +109,11 @@ async def _client_for(acct: dict, cookies_dir: str):
     return client
 
 
-# ── Masa istirahat akun (cooldown) ──────────────────────────────
-# Limit X pulih sendiri setelah beberapa menit. Akun yang kena limit
-# diistirahatkan, bukan dibuang — dan catatannya disimpan ke berkas supaya
-# tetap berlaku walau program ditutup lalu dijalankan lagi.
-def _muat_cooldown(path: str) -> dict:
-    try:
-        with open(path, encoding="utf-8") as f:
-            return {str(k): float(v) for k, v in (json.load(f) or {}).items()}
-    except Exception:
-        return {}
-
-
-def _simpan_cooldown(path: str, data: dict) -> None:
-    try:
-        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-    except Exception as e:
-        print(f"  [x/twikit] gagal menyimpan cooldown: {e}")
-
-
-def akun_tersedia(accounts: list, cooldown: dict, sekarang: float,
-                  mulai: int = 0) -> int:
-    """Indeks akun pertama (>= `mulai`) yang tidak sedang istirahat; -1 bila nihil."""
-    for i in range(mulai, len(accounts)):
-        nama = str(accounts[i].get("username", i))
-        if cooldown.get(nama, 0) <= sekarang:
-            return i
-    return -1
-
-
-def sisa_istirahat(accounts: list, cooldown: dict, sekarang: float) -> float:
-    """Menit sampai akun pertama bebas lagi (0 bila tak ada catatan)."""
-    waktu = [cooldown.get(str(a.get("username", i)), 0)
-             for i, a in enumerate(accounts)]
-    tersisa = [w - sekarang for w in waktu if w > sekarang]
-    return round(min(tersisa) / 60, 1) if tersisa else 0.0
+def _catat(kuota_file: str, batas: int, docs: list) -> None:
+    """Catat pemakaian harian. Dipanggil di SETIAP jalan keluar collect()."""
+    if batas > 0 and docs:
+        pakai = catat_kuota(kuota_file, "x", len(docs))
+        print(f"  [x/twikit] pemakaian hari ini: {pakai}/{batas} tweet")
 
 
 # ── Pengumpulan ─────────────────────────────────────────────────
@@ -166,13 +135,23 @@ async def collect(cfg_x: dict, queries: List[str]) -> Tuple[List[Document], list
     dmax = float(tcfg.get("max_delay_sec", 12))
     cd_menit = float(tcfg.get("cooldown_minutes", 15))
     cd_file = tcfg.get("cooldown_file", "data/x_cooldown.json")
+    batas_harian = int(cfg_x.get("daily_limit", 0) or 0)
+    kuota_file = cfg_x.get("quota_file", "data/kuota_harian.json")
 
-    cooldown = _muat_cooldown(cd_file)
+    # Batas harian: menarik sedikit tapi rutin lebih aman daripada sekali banyak.
+    jatah = sisa_kuota(kuota_file, "x", batas_harian)
+    if jatah == 0:
+        print(f"  [x/twikit] batas harian {batas_harian} tweet sudah tercapai -> dilewati")
+        return [], []
+
+    cooldown = muat_json(cd_file)
     acct_idx = akun_tersedia(accounts, cooldown, time.time())
     if acct_idx < 0:
         print(f"  [x/twikit] semua akun masih istirahat "
               f"(~{sisa_istirahat(accounts, cooldown, time.time())} menit lagi) -> dilewati")
         return [], []
+    if jatah > 0:
+        print(f"  [x/twikit] sisa jatah hari ini: {jatah} tweet")
 
     docs: List[Document] = []
     edges: list = []
@@ -190,17 +169,23 @@ async def collect(cfg_x: dict, queries: List[str]) -> Tuple[List[Document], list
         return True
 
     for query in queries:
+        if jatah == 0:                      # jatah harian habis di tengah jalan
+            print("  [x/twikit] batas harian tercapai -> query berikutnya dilewati")
+            break
+        # jatah -1 = tanpa batas; selain itu kuota query dipotong sisa jatah
+        batas_query = per_query if jatah < 0 else min(per_query, jatah)
         collected = 0
         result = None                       # halaman aktif; None = mulai dari awal
-        while collected < per_query:
+        while collected < batas_query:
             if not await ensure_client():
                 print(f"  [x/twikit] semua akun istirahat "
                       f"(~{sisa_istirahat(accounts, cooldown, time.time())} menit lagi) -> stop")
+                _catat(kuota_file, batas_harian, docs)
                 return docs, edges
             try:
                 if result is None:
                     result = await client.search_tweet(
-                        query, product=product, count=min(20, per_query - collected))
+                        query, product=product, count=min(20, batas_query - collected))
                 else:
                     # PENTING: hasilnya harus dipakai. Bila tidak, pencarian
                     # mengulang halaman pertama terus — boros permintaan dan
@@ -213,13 +198,11 @@ async def collect(cfg_x: dict, queries: List[str]) -> Tuple[List[Document], list
                     docs.append(doc)
                     edges.extend(e)
                     collected += 1
-                    if collected >= per_query:
+                    if collected >= batas_query:
                         break
                 await asyncio.sleep(random.uniform(dmin, dmax))
             except TooManyRequests:
-                nama = str(accounts[acct_idx].get("username", acct_idx))
-                cooldown[nama] = time.time() + cd_menit * 60
-                _simpan_cooldown(cd_file, cooldown)
+                istirahatkan(cd_file, cooldown, accounts, acct_idx, cd_menit)
                 print(f"  [x/twikit] akun #{acct_idx + 1} kena limit "
                       f"-> istirahat {cd_menit:.0f} menit, ganti akun")
                 client, result, acct_idx = None, None, acct_idx + 1
@@ -227,6 +210,9 @@ async def collect(cfg_x: dict, queries: List[str]) -> Tuple[List[Document], list
             except Exception as e:
                 print(f"  [x/twikit] error query '{query}': {e}")
                 break
+        if jatah > 0:
+            jatah -= collected
         print(f"  [x/twikit] '{query}': {collected} tweet")
 
+    _catat(kuota_file, batas_harian, docs)
     return docs, edges
