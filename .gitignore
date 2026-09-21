@@ -18,3 +18,8 @@ resources/inset/
 
 # Cache unduhan (wheel torch GPU, dll.)
 .cache/
+
+# Konfigurasi plugin Claude Code (lokal, bukan bagian proyek)
+.claude/agents/
+.claude/settings/
+.claude/system-prompts/
