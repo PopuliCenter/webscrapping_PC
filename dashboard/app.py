@@ -75,6 +75,80 @@ SUMBER_KATA_KUNCI = [
 ]
 
 
+# Rem pengaman yang boleh disetel dari dashboard. Format:
+#   (judul, path di config.yaml, satuan, langkah, bantuan)
+SETELAN_REM = {
+    "X / Twitter": [
+        ("Batas per hari", ["x", "daily_limit"], "tweet", 50,
+         "Total tweet per HARI, lintas query & siklus. 0 = tanpa batas."),
+        ("Ambil per query", ["x", "tweets_per_query"], "tweet", 10,
+         "Berapa tweet diambil tiap query dalam satu siklus."),
+        ("Jeda minimum", ["x", "twikit", "min_delay_sec"], "detik", 1,
+         "Jeda acak antar permintaan; makin besar makin aman."),
+        ("Jeda maksimum", ["x", "twikit", "max_delay_sec"], "detik", 1, ""),
+        ("Istirahat akun", ["x", "twikit", "cooldown_minutes"], "menit", 5,
+         "Lama akun diistirahatkan setelah kena limit."),
+    ],
+    "Instagram": [
+        ("Batas per hari", ["instagram", "daily_limit"], "post", 25,
+         "Total post per HARI. 0 = tanpa batas."),
+        ("Ambil per tagar", ["instagram", "posts_per_tag"], "post", 5, ""),
+        ("Jeda minimum", ["instagram", "min_delay_sec"], "detik", 1,
+         "IG jauh lebih agresif — jeda besar sangat disarankan."),
+        ("Jeda maksimum", ["instagram", "max_delay_sec"], "detik", 1, ""),
+        ("Istirahat akun", ["instagram", "cooldown_minutes"], "menit", 15, ""),
+    ],
+}
+
+
+def panel_rem():
+    """Sunting batas harian, jeda & istirahat akun -> config.yaml."""
+    from core.config_edit import baca_scalar, set_scalar
+
+    cfg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            "config.yaml")
+    with st.expander("🛡️ Batas & jeda (anti-banned)", expanded=False):
+        st.caption("Rem pengaman penarikan medsos. Makin kecil & makin lambat, "
+                   "makin kecil risiko akun dibatasi.")
+        with st.form("form_rem"):
+            isian = {}
+            for judul, baris in SETELAN_REM.items():
+                st.markdown(f"**{judul}**")
+                for label, path, satuan, langkah, bantuan in baris:
+                    isian[tuple(path)] = st.number_input(
+                        f"{label} ({satuan})", min_value=0, step=langkah,
+                        value=int(baca_scalar(cfg_path, path, 0) or 0),
+                        help=bantuan or None, key="rem_" + "_".join(path))
+            simpan = st.form_submit_button("Simpan", width="stretch")
+
+        if simpan:
+            salah = []
+            for judul, baris in SETELAN_REM.items():                # jeda min <= maks
+                jeda = {l: isian[tuple(p)] for l, p, *_ in baris if "Jeda" in l}
+                if jeda.get("Jeda minimum", 0) > jeda.get("Jeda maksimum", 0):
+                    salah.append(f"{judul}: jeda minimum melebihi maksimum")
+            if salah:
+                st.error(" · ".join(salah) + " — tidak ada yang disimpan.")
+                return
+            ubah = []
+            for judul, baris in SETELAN_REM.items():
+                for label, path, satuan, *_ in baris:
+                    baru = int(isian[tuple(path)])
+                    if baru != baca_scalar(cfg_path, path, 0):
+                        try:
+                            set_scalar(cfg_path, path, baru)
+                            ubah.append(f"{judul} · {label} = {baru} {satuan}")
+                        except Exception as e:
+                            st.error(f"{judul} · {label} gagal disimpan: {e}")
+            if ubah:
+                _cfg.clear()
+                st.success("Tersimpan: " + "; ".join(ubah))
+                st.caption("Scheduler membaca ulang config tiap siklus, "
+                           "jadi berlaku pada siklus berikutnya tanpa restart.")
+            else:
+                st.info("Tidak ada perubahan.")
+
+
 def tarik_data_sekarang(timeout: int = 900):
     """Jalankan run_once.py sebagai proses terpisah (-> (berhasil, keluaran)).
 
@@ -164,6 +238,7 @@ with st.sidebar:
     st.caption(f"Total dokumen di DB: {len(df)}")
     st.divider()
     panel_kata_kunci()
+    panel_rem()
 
 f = df[df["platform"].isin(sel_plat) & df["sentiment_label"].isin(sel_sent)]
 teks_terpilih = tuple(f["teks"].dropna().tolist())

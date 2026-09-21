@@ -165,7 +165,8 @@ sentimen 21.000 data ±15 menit, sarkasme ±6 menit. Lihat [PANDUAN §12g](PANDU
   distribusi sentimen, **tren & indeks sentimen bersih per topik**, dan peta
   jaringan diwarnai per komunitas. Panel **🔎 Kata kunci** di sidebar menyunting
   kata kunci Berita/X/Instagram langsung ke `config.yaml` (komentar tetap utuh)
-  dan bisa menarik data saat itu juga.
+  dan bisa menarik data saat itu juga; panel **🛡️ Batas & jeda** menyetel batas
+  harian, jeda, dan lama istirahat akun tanpa membuka file.
 
 ## 📂 Struktur
 

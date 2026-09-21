@@ -104,6 +104,11 @@ Semua diatur di **`config.yaml`** — tak perlu menyentuh kode.
 > Kata kunci lama tidak menghapus data yang sudah terkumpul; perubahan hanya
 > berlaku untuk penarikan berikutnya.
 
+> **Batas & jeda juga bisa dari sidebar:** panel **🛡️ Batas & jeda
+> (anti-banned)** menyetel batas harian, jumlah per query/tagar, jeda, dan lama
+> istirahat akun untuk X & Instagram — tersimpan ke `config.yaml` juga. Jeda
+> minimum yang melebihi maksimum ditolak sebelum apa pun ditulis.
+
 > **Tanpa restart:** scheduler membaca ulang `config.yaml` **setiap siklus**,
 > jadi kata kunci, batas harian, dan jeda langsung berlaku di siklus berikutnya.
 > Config yang rusak (mis. sedang diedit) tidak mematikan scheduler — siklus itu

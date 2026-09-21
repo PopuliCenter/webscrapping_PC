@@ -107,6 +107,63 @@ def set_list(path_yaml: str, path: List[str], nilai: List[str]) -> None:
         raise ValueError(f"gagal menulis {'.'.join(path)} — config dikembalikan")
 
 
+def _tulis_yaml(nilai) -> str:
+    if isinstance(nilai, bool):
+        return "true" if nilai else "false"
+    if isinstance(nilai, (int, float)):
+        return str(nilai)
+    return '"{}"'.format(str(nilai).replace('"', '\\"'))
+
+
+def set_scalar(path_yaml: str, path: List[str], nilai) -> None:
+    """Ganti nilai tunggal (angka/teks/boolean) pada `path`.
+
+    Komentar di baris itu dipertahankan, termasuk perataannya bila masih muat.
+    """
+    with open(path_yaml, encoding="utf-8", newline="") as f:
+        asli = f.read()
+    baris = asli.splitlines(keepends=True)
+    eol = "\r\n" if asli.count("\r\n") * 2 > asli.count("\n") else "\n"
+
+    i = _cari_kunci(baris, path)
+    teks = baris[i].rstrip("\r\n")
+    depan, pisah, komentar = teks.partition("#")
+    kunci = depan.split(":", 1)[0]
+    isi = f"{kunci}: {_tulis_yaml(nilai)}"
+    if pisah:                                   # jaga kolom komentar bila muat
+        isi = isi.ljust(len(depan.rstrip()) + 1) if len(isi) >= len(depan) \
+            else isi.ljust(len(depan))
+        isi = f"{isi}{pisah}{komentar}"
+    baris[i] = isi + eol
+
+    with open(path_yaml, "w", encoding="utf-8", newline="") as f:
+        f.write("".join(baris))
+
+    try:                                        # verifikasi seperti set_list
+        cek = yaml.safe_load(open(path_yaml, encoding="utf-8"))
+        for k in path:
+            cek = cek[k]
+        cocok = cek == nilai
+    except Exception:
+        cocok = False
+    if not cocok:
+        with open(path_yaml, "w", encoding="utf-8", newline="") as f:
+            f.write(asli)
+        raise ValueError(f"gagal menulis {'.'.join(path)} — config dikembalikan")
+
+
+def baca_scalar(path_yaml: str, path: List[str], bawaan=None):
+    """Baca satu nilai; kembalikan `bawaan` bila tidak ada."""
+    if not os.path.isfile(path_yaml):
+        return bawaan
+    data = yaml.safe_load(open(path_yaml, encoding="utf-8")) or {}
+    for k in path:
+        if not isinstance(data, dict) or k not in data:
+            return bawaan
+        data = data[k]
+    return bawaan if data is None else data
+
+
 def baca_list(path_yaml: str, path: List[str]) -> List[str]:
     """Baca daftar pada `path`; kembalikan [] bila tidak ada."""
     if not os.path.isfile(path_yaml):
