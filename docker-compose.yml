@@ -27,8 +27,10 @@ services:
       - "8501:8501"
     volumes:
       - ./data:/app/data                        # baca DB yang sama
-      - ./config.yaml:/app/config.yaml
+      - ./config.yaml:/app/config.yaml          # panel kata kunci menulis ke sini
+      - ./secrets:/app/secrets:ro               # tombol "Tarik data sekarang" butuh kredensial
       - ./models:/app/models:ro                 # model lokal (tab analisis di dashboard)
+      - hf-cache:/root/.cache/huggingface       # cache model, sama seperti scheduler
     restart: unless-stopped
 
 volumes:
