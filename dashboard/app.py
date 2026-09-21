@@ -129,13 +129,15 @@ with tab_ring:
         panjang = f[f["bagian_total"].fillna(0) > 1].copy()
         panjang["bagian negatif"] = (panjang["bagian_negatif"].fillna(0).astype(int).astype(str)
                                      + " / " + panjang["bagian_total"].astype(int).astype(str))
+        # judul & kutipan dipendekkan agar semua kolom muat tanpa geser ke samping
+        panjang["judul"] = panjang["title"].fillna("").str.slice(0, 60)
+        panjang["kutipan paling negatif"] = panjang["kutipan_negatif"].fillna("").str.slice(0, 90)
         st.dataframe(
             panjang.sort_values("bagian_negatif", ascending=False)
-            .head(25)[["source", "title", "sentiment_label", "sentiment_score",
-                       "bagian negatif", "kutipan_negatif"]]
-            .rename(columns={"sentiment_label": "sentimen", "sentiment_score": "nilai",
-                             "kutipan_negatif": "kutipan paling negatif"}),
-            width="stretch")
+            .head(25)[["source", "judul", "sentiment_label", "sentiment_score",
+                       "bagian negatif", "kutipan paling negatif"]]
+            .rename(columns={"sentiment_label": "sentimen", "sentiment_score": "nilai"}),
+            width="stretch", hide_index=True)
 
 
 # ── TAB 2: Tren per topik ───────────────────────────────────────
