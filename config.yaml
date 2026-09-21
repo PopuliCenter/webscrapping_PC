@@ -49,6 +49,8 @@ x:
     cookies_dir: "data/x_cookies"
     min_delay_sec: 5      # jeda acak antar request (anti-limit)
     max_delay_sec: 12
+    cooldown_minutes: 15  # akun yang kena limit diistirahatkan sekian menit
+    cooldown_file: "data/x_cooldown.json"   # catatan istirahat (tahan restart)
 
   # Jalur BERBAYAR (fallback stabil) — token di environment variable.
   service:

@@ -170,6 +170,19 @@ Ada 2 jalur, diatur di `config.yaml → x.method`:
 > **Tips anti-limit:** makin banyak akun + proxy residensial, makin tahan.
 > Sesi login otomatis di-cache di `data/x_cookies/` supaya tidak login berulang.
 
+**Masa istirahat akun (cooldown).** Akun yang kena limit tidak dibuang, tapi
+diistirahatkan lalu dipakai lagi setelah limitnya pulih:
+```yaml
+x:
+  twikit:
+    cooldown_minutes: 15                     # lama istirahat setelah kena limit
+    cooldown_file: "data/x_cooldown.json"    # catatan istirahat, tahan restart
+```
+Kalau semua akun sedang istirahat, siklus X dilewati tanpa mengirim permintaan
+apa pun — persis saat yang paling rawan bila dipaksa. Pesannya menyebut sisa
+waktunya, mis. `semua akun masih istirahat (~10.0 menit lagi) -> dilewati`.
+Hapus `data/x_cooldown.json` bila ingin mengabaikan catatan itu.
+
 ### Jalur berbayar (Apify)
 ```powershell
 setx APIFY_TOKEN "apify_xxxxx"        # Windows (buka terminal baru setelah ini)
@@ -682,7 +695,8 @@ python -m analysis.zeroshot --kalibrasi # kalibrasi ulang ambang 5 tingkat
 | Berita 0 padahal kata kunci ada | Belum ada artikel baru yang cocok saat itu — normal, coba lagi nanti atau tambah feed. |
 | `[gdelt] 429 / timeout` | GDELT membatasi laju atau jaringan lambat. Sudah ada retry otomatis; aman diabaikan. |
 | `[x/twikit] belum ada akun` | Isi `secrets/x_accounts.yaml`. |
-| `[x/twikit] kena limit -> rotasi akun` | Wajar; tambah akun/proxy agar lebih tahan. |
+| `[x/twikit] akun #N kena limit -> istirahat 15 menit` | Wajar; akun dipakai lagi setelah itu. Tambah akun/proxy agar lebih tahan. |
+| `semua akun masih istirahat` | Tunggu sesuai sisa waktu, atau hapus `data/x_cooldown.json`. |
 | Akun X/IG kena suspend | Risiko jalur gratis. Pakai akun cadangan, atau pindah ke Apify (`method: service`). |
 | Model IndoBERT lama diunduh | Hanya sekali (~500MB), lalu di-cache. Untuk uji cepat pakai `engine: lexicon`. |
 | Dashboard "Database kosong" | Jalankan `python run_once.py` dulu agar ada data. |
