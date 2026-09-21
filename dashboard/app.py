@@ -244,10 +244,10 @@ f = df[df["platform"].isin(sel_plat) & df["sentiment_label"].isin(sel_sent)]
 teks_terpilih = tuple(f["teks"].dropna().tolist())
 
 (tab_ring, tab_topik, tab_teks, tab_heat, tab_sna, tab_bot, tab_ml,
- tab_emo, tab_nuansa, tab_hf) = st.tabs(
+ tab_emo, tab_nuansa, tab_hf, tab_label) = st.tabs(
     ["📊 Ringkasan", "📈 Topik", "☁️ Teks & Word Cloud", "🔥 Heatmap",
      "🕸️ Jaringan", "🤖 Bot/Buzzer", "🧪 Klasifikasi ML",
-     "😠 Emosi", "🎯 Intent & Sarkasme", "🔬 Banding Model"])
+     "😠 Emosi", "🎯 Intent & Sarkasme", "🔬 Banding Model", "🏷️ Pelabelan"])
 
 
 # ── TAB 1: Ringkasan ────────────────────────────────────────────
@@ -815,6 +815,92 @@ with tab_hf:
                     gagal = [k for k, v in res["hasil"].items() if "error" in v]
                     if gagal:
                         st.warning(f"Gagal dimuat (biasanya koneksi): {', '.join(gagal)}")
+
+
+# ── TAB: Pelabelan manual ───────────────────────────────────────
+FILE_LABEL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                          "data", "label_berita.csv")
+LABEL_PILIHAN = [("negative", "🔴 Negatif"), ("neutral", "⚪ Netral"),
+                 ("positive", "🟢 Positif")]
+
+
+def _baca_label() -> pd.DataFrame:
+    return pd.read_csv(FILE_LABEL, dtype=str, keep_default_na=False)
+
+
+def _simpan_label(df: pd.DataFrame) -> None:
+    """Tulis seluruh berkas tiap kali — 300 baris, murah, dan tahan crash."""
+    df.to_csv(FILE_LABEL, index=False, encoding="utf-8")
+
+
+with tab_label:
+    st.subheader("🏷️ Pelabelan berita oleh manusia")
+    st.caption("Label dari MANUSIA adalah satu-satunya cara memperbaiki model di "
+               "bahasa berita — melatih dengan tebakan mesin hanya menyalin "
+               "kesalahannya. Usulan di bawah hanya tebakan model; kamu yang memutuskan.")
+
+    if not os.path.isfile(FILE_LABEL):
+        st.info("Belum ada daftar paragraf. Buat dulu di terminal:\n\n"
+                "`python tools/siapkan_pelabelan.py`")
+    else:
+        df = _baca_label()
+        terisi = (df["label"].str.len() > 0)
+        n_total, n_isi = len(df), int(terisi.sum())
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Sudah dilabeli", f"{n_isi} / {n_total}")
+        c2.metric("Bagian uji", f"{int((terisi & (df['bagian'] == 'uji')).sum())} / "
+                                f"{int((df['bagian'] == 'uji').sum())}")
+        c3.metric("Bagian latih", f"{int((terisi & (df['bagian'] == 'latih')).sum())} / "
+                                  f"{int((df['bagian'] == 'latih').sum())}")
+        st.progress(n_isi / n_total if n_total else 0.0)
+
+        belum = df[~terisi]
+        if belum.empty:
+            st.success("Semua paragraf sudah dilabeli. Lanjut fine-tune:")
+            st.code("python tools/siapkan_pelabelan.py --ekspor\n"
+                    "python -m analysis.finetune_indobert --tugas sentimen "
+                    "--csv data/latih_berita.csv --epochs 4 "
+                    "--output models/sentimen-berita-kandidat\n"
+                    "python -m analysis.hf_models --bandingkan models/sentimen-berita-kandidat")
+        else:
+            baris = belum.iloc[0]
+            st.caption(f"#{baris['id']} · {baris['bagian']} · {baris['source']}")
+            st.markdown(f"> {baris['paragraf']}")
+            if baris["url"]:
+                st.caption(f"[sumber berita]({baris['url']})")
+
+            kolom = st.columns(len(LABEL_PILIHAN) + 2)
+            for kol, (nilai, teks) in zip(kolom, LABEL_PILIHAN):
+                utama = "primary" if nilai == baris["usulan"] else "secondary"
+                if kol.button(teks, key=f"lab_{nilai}", type=utama, width="stretch"):
+                    df.loc[df["id"] == baris["id"], "label"] = nilai
+                    _simpan_label(df)
+                    st.rerun()
+            if kolom[-2].button("⏭️ Lewati", key="lab_skip", width="stretch",
+                                help="Paragraf tidak jelas / bukan opini — tandai agar dibuang"):
+                df.loc[df["id"] == baris["id"], "label"] = "lewati"
+                _simpan_label(df)
+                st.rerun()
+            if kolom[-1].button("↩️ Batalkan", key="lab_undo", width="stretch",
+                                help="Hapus label terakhir yang tersimpan"):
+                sudah = df[df["label"].str.len() > 0]
+                if not sudah.empty:
+                    df.loc[df.index == sudah.index[-1], "label"] = ""
+                    _simpan_label(df)
+                st.rerun()
+            st.caption(f"Usulan model: **{baris['usulan'] or '-'}** (tombolnya disorot). "
+                       "Tekan tombol lain bila menurutmu keliru — justru koreksi itu "
+                       "yang paling berharga untuk model.")
+
+        with st.expander("Pedoman singkat"):
+            st.markdown(
+                "- **Negatif** — menyatakan masalah, kerugian, kritik, protes, "
+                "kekhawatiran, atau kegagalan.\n"
+                "- **Positif** — dukungan, pujian, keberhasilan, harapan, perbaikan.\n"
+                "- **Netral** — fakta, prosedur, jadwal, angka, kutipan tanpa sikap.\n"
+                "- Nilai **nada paragrafnya**, bukan pendapatmu soal topiknya.\n"
+                "- Ragu antara netral dan berpolaritas? Pilih **netral**.\n"
+                "- Bukan kalimat berita (navigasi, potongan rusak)? **Lewati**.")
 
 
 st.caption("Data auto-refresh tiap 60 detik. Atur sumber & kata kunci di config.yaml.")

@@ -6,10 +6,8 @@
 # Kata kunci yang dipantau. Dipakai untuk filter & query GDELT.
 # Cocokkan case-insensitive terhadap judul + isi.
 keywords:
-  - "ibu kota nusantara"
-  - "ikn"
-  - "pemilu"
-  - "subsidi bbm"
+  - "Prabowo"
+  - "Purbaya"
 
 # Bahasa target untuk filter (kosongkan untuk semua).
 language: "id"
@@ -38,8 +36,8 @@ x:
   enabled: true
   method: "auto"          # twikit | service | auto (twikit dulu, fallback service)
   search_queries:         # query pencarian X (boleh beda dari keyword global)
-    - "ikn"
-    - "subsidi bbm"
+    - "Prabowo"
+    - "Purbaya"
   tweets_per_query: 50
   product: "Latest"       # Latest | Top
   daily_limit: 300        # maks tweet per HARI (0 = tanpa batas)
@@ -64,9 +62,7 @@ x:
 # ── Sumber INSTAGRAM (Fase 4) ────────────────────────────────
 instagram:
   enabled: false          # nyalakan setelah isi secrets/ig_accounts.yaml
-  hashtags:
-    - "ikn"
-    - "pemilu"
+  hashtags: []
   posts_per_tag: 30
   accounts_file: "secrets/ig_accounts.yaml"
   cookies_dir: "data/ig_sessions"
