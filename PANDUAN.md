@@ -97,6 +97,13 @@ Buka browser ke http://localhost:8501.
 
 Semua diatur di **`config.yaml`** — tak perlu menyentuh kode.
 
+> **Lewat dashboard (tanpa buka file):** sidebar → **🔎 Kata kunci**. Isi satu
+> kata kunci per baris untuk Berita, X, dan Instagram, lalu **Simpan** —
+> tersimpan langsung ke `config.yaml` (komentar di dalamnya tetap utuh). Tombol
+> **⬇️ Tarik data sekarang** menjalankan `run_once.py` dan menampilkan hasilnya.
+> Kata kunci lama tidak menghapus data yang sudah terkumpul; perubahan hanya
+> berlaku untuk penarikan berikutnya.
+
 **Kata kunci yang dipantau:**
 ```yaml
 keywords:

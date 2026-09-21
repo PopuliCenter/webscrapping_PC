@@ -61,6 +61,84 @@ def cached_freq(texts: tuple, stem: bool) -> dict:
     return textstats.freq_dict(list(texts), get_preprocessor(stem))
 
 
+# ── Panel kata kunci ────────────────────────────────────────────
+# Sumbernya beda gaya penulisan: berita pakai frasa ("ibu kota nusantara"),
+# X pakai query pendek, IG pakai tagar tanpa spasi. Karena itu dipisah.
+SUMBER_KATA_KUNCI = [
+    ("Berita (RSS + GDELT)", ["keywords"],
+     "Satu per baris. Berita yang tidak memuat salah satunya dibuang; "
+     "dipakai juga sebagai query GDELT."),
+    ("X / Twitter", ["x", "search_queries"],
+     "Query pencarian X. Biasanya kata pendek, boleh beda dari kata kunci berita."),
+    ("Instagram", ["instagram", "hashtags"],
+     "Tagar tanpa tanda # dan tanpa spasi, mis. ibukotanusantara."),
+]
+
+
+def tarik_data_sekarang(timeout: int = 900):
+    """Jalankan run_once.py sebagai proses terpisah (-> (berhasil, keluaran)).
+
+    Proses terpisah supaya model & memori GPU tidak menumpuk di dashboard.
+    """
+    import subprocess
+    proyek = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        p = subprocess.run([sys.executable, "run_once.py"], cwd=proyek, timeout=timeout,
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace")
+    except subprocess.TimeoutExpired:
+        return False, f"Melebihi {timeout // 60} menit — dihentikan."
+    keluaran = (p.stdout or "") + (p.stderr or "")
+    bersih = [b for b in keluaran.splitlines() if b.strip() and "it/s]" not in b]
+    return p.returncode == 0, "\n".join(bersih[-15:])
+
+
+def panel_kata_kunci():
+    """Sunting kata kunci per sumber, tersimpan ke config.yaml (komentar aman)."""
+    from core.config_edit import baca_list, set_list
+
+    cfg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            "config.yaml")
+    with st.expander("🔎 Kata kunci", expanded=False):
+        with st.form("form_kata_kunci"):
+            isian = {}
+            for judul, path, bantuan in SUMBER_KATA_KUNCI:
+                isian[tuple(path)] = st.text_area(
+                    judul, "\n".join(baca_list(cfg_path, path)),
+                    height=90, help=bantuan, key="kk_" + "_".join(path))
+            simpan = st.form_submit_button("Simpan", width="stretch")
+        if simpan:
+            ubah = []
+            for judul, path, _ in SUMBER_KATA_KUNCI:
+                baru = [b.strip().lstrip("#") for b in isian[tuple(path)].splitlines()]
+                baru = [b for b in baru if b]
+                if baru != baca_list(cfg_path, path):
+                    try:
+                        set_list(cfg_path, path, baru)
+                        ubah.append(f"{judul}: {len(baru)} kata kunci")
+                    except Exception as e:
+                        st.error(f"{judul} gagal disimpan: {e}")
+            if ubah:
+                _cfg.clear()                       # config di-cache 60 detik
+                st.success("Tersimpan — " + "; ".join(ubah))
+                st.caption("Berlaku pada penarikan data berikutnya "
+                           "(scheduler membaca ulang config tiap siklus).")
+            else:
+                st.info("Tidak ada perubahan.")
+
+        st.caption("Kata kunci lama tetap tersimpan di database; mengubahnya "
+                   "hanya memengaruhi data yang ditarik berikutnya.")
+        if st.button("⬇️ Tarik data sekarang", width="stretch"):
+            with st.spinner("Menarik & menganalisis data..."):
+                ok, keluaran = tarik_data_sekarang()
+            st.code(keluaran or "(tanpa keluaran)")
+            if ok:
+                load_docs.clear()
+                st.success("Selesai. Muat ulang halaman untuk melihat data baru.")
+            else:
+                st.error("Gagal — lihat pesan di atas.")
+
+
 # ── Header & filter ─────────────────────────────────────────────
 st.title("📡 Monitoring Sosial & Berita")
 st.caption("Sentimen · Social Network Analysis · Deteksi Buzzer — gaya Drone Emprit")
@@ -84,6 +162,8 @@ with st.sidebar:
     pakai_stem = st.checkbox("Stemming (Sastrawi)", value=True,
                              help="Kembalikan kata ke bentuk dasar. Matikan bila lambat.")
     st.caption(f"Total dokumen di DB: {len(df)}")
+    st.divider()
+    panel_kata_kunci()
 
 f = df[df["platform"].isin(sel_plat) & df["sentiment_label"].isin(sel_sent)]
 teks_terpilih = tuple(f["teks"].dropna().tolist())
