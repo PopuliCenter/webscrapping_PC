@@ -42,7 +42,7 @@ x:
     - "subsidi bbm"
   tweets_per_query: 50
   product: "Latest"       # Latest | Top
-  daily_limit: 0          # maks tweet per HARI (0 = tanpa batas). Mis. 300 utk aman.
+  daily_limit: 300        # maks tweet per HARI (0 = tanpa batas)
   quota_file: "data/kuota_harian.json"    # catatan pemakaian harian
 
   # Jalur GRATIS (login akun) — isi kredensial di file secrets terpisah.
@@ -74,7 +74,7 @@ instagram:
   max_delay_sec: 20
   cooldown_minutes: 60    # akun yang dibatasi IG diistirahatkan sejam (IG galak)
   cooldown_file: "data/ig_cooldown.json"
-  daily_limit: 0          # maks post per HARI (0 = tanpa batas). Mis. 100 utk aman.
+  daily_limit: 100        # maks post per HARI (0 = tanpa batas)
   quota_file: "data/kuota_harian.json"
 
 # ── Sumber FACEBOOK (Fase 4) ─────────────────────────────────

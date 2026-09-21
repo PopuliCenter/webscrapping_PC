@@ -25,9 +25,23 @@ def main():
         from datetime import datetime
         print(f"\n--- {tag} {datetime.now():%Y-%m-%d %H:%M:%S} ---")
 
+    def _muat_ulang():
+        """Baca ulang config tiap siklus: ubah kata kunci/batas tanpa restart.
+
+        Config rusak (mis. sedang diedit) tidak boleh mematikan scheduler —
+        siklus itu memakai config lama dan mencoba lagi nanti.
+        """
+        nonlocal cfg
+        try:
+            cfg = load_config()
+        except Exception as e:
+            print(f"[scheduler] config gagal dibaca ({e}) -> pakai yang lama")
+        return cfg
+
     def news_cycle():
         _stamp("NEWS")
         try:
+            cfg = _muat_ulang()
             collect_news(cfg, store)
             collect_facebook(cfg, store)     # impor file (idempoten, murah)
             analyze_sentiment(cfg, store)
@@ -38,6 +52,7 @@ def main():
     def ig_cycle():
         _stamp("INSTAGRAM")
         try:
+            cfg = _muat_ulang()
             collect_instagram(cfg, store)
             analyze_sentiment(cfg, store)
             print("stats:", store.stats())
@@ -47,6 +62,7 @@ def main():
     def x_cycle():
         _stamp("X/TWITTER")
         try:
+            cfg = _muat_ulang()
             collect_x(cfg, store)
             analyze_sentiment(cfg, store)
             print("stats:", store.stats())

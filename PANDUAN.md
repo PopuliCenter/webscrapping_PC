@@ -104,6 +104,12 @@ Semua diatur di **`config.yaml`** — tak perlu menyentuh kode.
 > Kata kunci lama tidak menghapus data yang sudah terkumpul; perubahan hanya
 > berlaku untuk penarikan berikutnya.
 
+> **Tanpa restart:** scheduler membaca ulang `config.yaml` **setiap siklus**,
+> jadi kata kunci, batas harian, dan jeda langsung berlaku di siklus berikutnya.
+> Config yang rusak (mis. sedang diedit) tidak mematikan scheduler — siklus itu
+> memakai config lama dan mencoba lagi nanti. Pengecualian: `schedule.*_minutes`
+> menentukan jadwal job dan baru berlaku setelah scheduler di-restart.
+
 **Kata kunci yang dipantau:**
 ```yaml
 keywords:
