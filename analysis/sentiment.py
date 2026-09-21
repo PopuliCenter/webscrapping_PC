@@ -23,6 +23,62 @@ DEFAULT_MODEL_DIR = os.path.join(
     "models", "indobert-sentiment")
 
 
+# Batas aman satu potong teks. IndoBERT memproses maksimal 512 token; 512
+# KARAKTER selalu di bawah batas itu, jadi tidak ada teks yang diam-diam terpotong.
+MAKS_KARAKTER = 512
+# Ambang label gabungan: |skor| di bawah ini dianggap netral (sama dengan lexicon).
+AMBANG_GABUNG = 0.05
+# Potongan lebih pendek dari ini ditempel ke tetangganya (bukan paragraf utuh).
+MIN_GABUNG = 80
+
+_AKHIR_KALIMAT = re.compile(r"(?<=[.!?])\s+")
+
+
+def potong_bagian(text: str, maks: int = MAKS_KARAKTER,
+                  min_gabung: int = MIN_GABUNG) -> list:
+    """Pecah teks jadi bagian <= `maks` karakter, satu paragraf satu bagian.
+
+    Paragraf utuh sengaja TIDAK digabung: kalau digabung, paragraf protes bisa
+    menempel pada paragraf netral dan nadanya saling menghapus. Hanya potongan
+    sangat pendek (< `min_gabung` karakter — baris tanggal, nama kota, sisa
+    kutipan) yang ditempel ke tetangganya. Paragraf kelewat panjang dipecah per
+    kalimat, dan kalimat raksasa (teks tanpa titik) dipotong keras per `maks`.
+    """
+    teks = (text or "").strip()
+    if not teks:
+        return []
+    kasar = []
+    for par in re.split(r"\n\s*\n|\n", teks):
+        par = par.strip()
+        if not par:
+            continue
+        if len(par) <= maks:
+            kasar.append(par)
+            continue
+        buf = ""
+        for kal in _AKHIR_KALIMAT.split(par):
+            while len(kal) > maks:                 # kalimat tanpa titik
+                kasar.append(kal[:maks])
+                kal = kal[maks:]
+            if len(buf) + len(kal) + 1 <= maks:
+                buf = f"{buf} {kal}".strip()
+            else:
+                if buf:
+                    kasar.append(buf)
+                buf = kal
+        if buf:
+            kasar.append(buf)
+
+    bagian = []                                    # tempel potongan sangat pendek
+    for p in kasar:
+        if (bagian and min(len(bagian[-1]), len(p)) < min_gabung
+                and len(bagian[-1]) + len(p) + 1 <= maks):
+            bagian[-1] = f"{bagian[-1]} {p}"
+        else:
+            bagian.append(p)
+    return bagian
+
+
 _LABEL_ALIAS = {
     "label_0": "positive", "label_1": "neutral", "label_2": "negative",
     "positive": "positive", "neutral": "neutral", "negative": "negative",
@@ -34,6 +90,15 @@ _LABEL_ALIAS = {
 def _map_label(raw: str) -> str:
     """Terima label model bawaan (LABEL_0/1/2) maupun hasil fine-tuning sendiri."""
     return _LABEL_ALIAS.get(str(raw).strip().lower(), "neutral")
+
+
+def _perangkat() -> int:
+    """0 = GPU pertama, -1 = CPU (dipakai transformers.pipeline)."""
+    try:
+        import torch  # type: ignore
+        return 0 if torch.cuda.is_available() else -1
+    except Exception:
+        return -1
 
 
 def _is_local_model(path: str) -> bool:
@@ -122,7 +187,10 @@ class SentimentEngine:
                   f"-> memakai HuggingFace. Jalankan: python tools/setup_local_models.py")
         try:
             from transformers import pipeline  # type: ignore
-            self._pipe = pipeline("sentiment-analysis", model=sumber, tokenizer=sumber)
+            # Penilaian per paragraf = jauh lebih banyak panggilan model, jadi pakai
+            # GPU bila ada (pipeline bawaannya CPU). Tanpa GPU tetap jalan normal.
+            self._pipe = pipeline("sentiment-analysis", model=sumber, tokenizer=sumber,
+                                  device=_perangkat())
             self.model_source = sumber
         except Exception as e:
             print(f"[sentiment] IndoBERT gagal dimuat ({e}) -> fallback lexicon")
@@ -151,6 +219,49 @@ class SentimentEngine:
             signed = conf if label == "positive" else (-conf if label == "negative" else 0.0)
             res.append((label, round(signed, 4)))
         return res
+
+    # ── Teks panjang: per bagian ─────────────────────────────
+    def predict_panjang(self, text: str, maks: int = MAKS_KARAKTER) -> dict:
+        """Nilai teks panjang PER BAGIAN, lalu gabungkan.
+
+        `predict()` hanya melihat ~512 karakter pertama (batas IndoBERT), jadi
+        berita panjang praktis dinilai dari paragraf pembuka saja. Di sini teks
+        dipotong per paragraf/kalimat, tiap bagian dinilai sendiri, dan hasilnya
+        digabung dengan bobot panjang bagian (paragraf panjang lebih berpengaruh).
+
+        -> {label, score, bagian_total, bagian_negatif, bagian_positif,
+            kutipan_negatif, bagian: [(teks, label, score)]}
+        """
+        bagian = potong_bagian(text, maks)
+        return self._gabung(bagian, self.predict_batch(bagian) if bagian else [])
+
+    def predict_panjang_batch(self, texts: list, maks: int = MAKS_KARAKTER) -> list:
+        """predict_panjang untuk banyak teks — semua bagian dinilai sekali jalan."""
+        potongan = [potong_bagian(t, maks) for t in texts]
+        rata = [b for p in potongan for b in p]
+        nilai = iter(self.predict_batch(rata)) if rata else iter(())
+        hasil = []
+        for p in potongan:
+            sub = [next(nilai) for _ in p]
+            hasil.append(self._gabung(p, sub))
+        return hasil
+
+    @staticmethod
+    def _gabung(bagian: list, nilai: list) -> dict:
+        if not bagian:
+            return {"label": "neutral", "score": 0.0, "bagian_total": 0,
+                    "bagian_negatif": 0, "bagian_positif": 0,
+                    "kutipan_negatif": "", "bagian": []}
+        bobot = [len(b) for b in bagian]
+        skor = sum(s * w for (_, s), w in zip(nilai, bobot)) / (sum(bobot) or 1)
+        neg = [(s, b) for b, (l, s) in zip(bagian, nilai) if l == "negative"]
+        return {"label": ("positive" if skor > AMBANG_GABUNG else
+                          "negative" if skor < -AMBANG_GABUNG else "neutral"),
+                "score": round(skor, 4), "bagian_total": len(bagian),
+                "bagian_negatif": len(neg),
+                "bagian_positif": sum(1 for l, _ in nilai if l == "positive"),
+                "kutipan_negatif": min(neg)[1][:300] if neg else "",
+                "bagian": [(b, l, s) for b, (l, s) in zip(bagian, nilai)]}
 
     # ── Publik ───────────────────────────────────────────────
     def predict(self, text: str) -> Tuple[str, float]:

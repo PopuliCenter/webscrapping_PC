@@ -85,9 +85,18 @@ def analyze_sentiment(cfg: dict, store: Storage) -> int:
         return 0
     print(f"[sentiment] mesin={engine.engine}, {len(pending)} dokumen...")
     texts = [f"{r.get('title','')} {r.get('content','')}".strip() for r in pending]
-    results = engine.predict_batch(texts)            # batch = cepat utk IndoBERT
-    for row, (label, score) in zip(pending, results):
-        store.update_sentiment(row["doc_id"], label, score)
+    # Per paragraf: berita panjang dinilai utuh, bukan hanya alinea pembuka.
+    hasil = engine.predict_panjang_batch(texts)
+    for row, h in zip(pending, hasil):
+        store.update_sentiment(row["doc_id"], h["label"], h["score"])
+        if h["bagian_total"] > 1:                    # rincian hanya utk teks panjang
+            store.update_fields(row["doc_id"], bagian_total=h["bagian_total"],
+                                bagian_negatif=h["bagian_negatif"],
+                                bagian_positif=h["bagian_positif"],
+                                kutipan_negatif=h["kutipan_negatif"])
+    panjang = sum(1 for h in hasil if h["bagian_total"] > 1)
+    print(f"  {panjang} dokumen dinilai per paragraf "
+          f"(rata-rata {sum(h['bagian_total'] for h in hasil) / max(len(hasil), 1):.1f} bagian)")
     return len(pending)
 
 

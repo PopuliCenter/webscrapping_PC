@@ -119,6 +119,24 @@ with tab_ring:
                  .rename_axis("source").reset_index(name="jumlah"),
                  width="stretch")
 
+    # Berita panjang dinilai per paragraf — tampilkan bagian yang memicu label negatif.
+    if "bagian_total" in f.columns and f["bagian_total"].fillna(0).gt(1).any():
+        st.subheader("Bagian paling negatif (berita panjang)")
+        st.caption("Berita panjang dinilai per paragraf, bukan hanya alinea pembuka. "
+                   "Kolom 'bagian negatif' menunjukkan berapa paragraf bernada negatif "
+                   "— berguna untuk membedakan berita yang negatif seluruhnya dari "
+                   "berita netral yang memuat satu kutipan keras.")
+        panjang = f[f["bagian_total"].fillna(0) > 1].copy()
+        panjang["bagian negatif"] = (panjang["bagian_negatif"].fillna(0).astype(int).astype(str)
+                                     + " / " + panjang["bagian_total"].astype(int).astype(str))
+        st.dataframe(
+            panjang.sort_values("bagian_negatif", ascending=False)
+            .head(25)[["source", "title", "sentiment_label", "sentiment_score",
+                       "bagian negatif", "kutipan_negatif"]]
+            .rename(columns={"sentiment_label": "sentimen", "sentiment_score": "nilai",
+                             "kutipan_negatif": "kutipan paling negatif"}),
+            width="stretch")
+
 
 # ── TAB 2: Tren per topik ───────────────────────────────────────
 def explode_topics(d: pd.DataFrame) -> pd.DataFrame:

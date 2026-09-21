@@ -241,6 +241,32 @@ sentiment:
   # engine: "lexicon"  # ringan, cepat, tanpa download — untuk uji cepat.
 ```
 
+### Berita panjang: dinilai per paragraf
+
+Yang disimpan dari tiap berita bukan hanya judul, tapi juga **isi artikel penuh**
+(diambil trafilatura bila `news.fetch_full_text: true`), dan penilaian memakai
+judul + isi.
+
+IndoBERT hanya bisa membaca ±512 karakter sekali jalan. Karena itu teks panjang
+dipecah **per paragraf**, tiap paragraf dinilai sendiri, lalu digabung dengan
+bobot panjang paragraf. Paragraf utuh sengaja tidak disatukan — kalau disatukan,
+paragraf protes bisa menempel ke paragraf netral dan nadanya saling menghapus.
+
+Hasil tambahan tersimpan di database:
+
+| Kolom | Arti |
+|---|---|
+| `bagian_total` | jumlah paragraf yang dinilai |
+| `bagian_negatif` / `bagian_positif` | berapa paragraf bernada negatif / positif |
+| `kutipan_negatif` | paragraf paling negatif (untuk menelusuri isu) |
+
+Ini membedakan berita yang **negatif seluruhnya** dari berita netral yang memuat
+**satu kutipan keras**. Rinciannya tampil di tab **Ringkasan** dashboard.
+
+Diuji pada 100 berita RSS nyata: 49 berita cukup panjang (rata-rata 7,5 paragraf),
+**11 label berubah** — hampir semua dari netral menjadi positif/negatif. Waktunya
+2,1 → 5,4 detik per 100 berita karena penilaian kini juga memakai GPU bila ada.
+
 ---
 
 ## 10. Menjalankan dengan Docker

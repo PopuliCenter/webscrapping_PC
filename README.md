@@ -143,6 +143,14 @@ otomatis fallback ke **lexicon**.
 > Buat ulang modelnya: `python tools/siapkan_data_latih.py sentimen` lalu
 > `python -m analysis.finetune_indobert --tugas sentimen --csv data/latih_20k.csv --output models/indobert-sentiment-finetuned`.
 
+**Berita panjang dinilai per paragraf.** IndoBERT hanya membaca ±512 karakter
+sekali jalan, jadi artikel panjang dulu dinilai dari alinea pembuka saja. Kini
+tiap paragraf dinilai sendiri lalu digabung dengan bobot panjangnya, dan kolom
+`bagian_total` / `bagian_negatif` / `kutipan_negatif` menyimpan rinciannya
+(tampil di tab Ringkasan). Pada 100 berita RSS nyata: **11 label berubah**,
+hampir semuanya dari *neutral* ke positif/negatif karena nada sebenarnya ada di
+tengah artikel. Waktu proses 2,1 → 5,4 detik per 100 berita (GPU).
+
 **Fine-tuning di GPU laptop:** `python tools/pasang_torch_gpu.py` mengganti PyTorch
 `+cpu` (bawaan PyPI di Windows) dengan versi CUDA. Di RTX 3050 Laptop 4 GB, latihan
 sentimen 21.000 data ±15 menit, sarkasme ±6 menit. Lihat [PANDUAN §12g](PANDUAN.md).

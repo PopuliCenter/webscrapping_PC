@@ -61,6 +61,9 @@ KOLOM_ANALISIS = {
     "intent_label": "TEXT", "intent_score": "REAL",
     "intensitas_label": "TEXT", "intensitas_score": "REAL",
     "sarkasme_label": "TEXT", "sarkasme_score": "REAL",
+    # Rincian sentimen per paragraf (berita panjang) — lihat analysis/sentiment.py
+    "bagian_total": "INTEGER", "bagian_negatif": "INTEGER",
+    "bagian_positif": "INTEGER", "kutipan_negatif": "TEXT",
 }
 
 
