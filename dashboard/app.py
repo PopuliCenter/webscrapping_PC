@@ -641,9 +641,15 @@ with tab_emo:
         from analysis.emotion import analisis_db
         with st.spinner("Menganalisis emosi (model diunduh sekali bila belum ada)..."):
             n = analisis_db(_db_path(), limit=2000)
-        st.success(f"{n} dokumen dianalisis.") if n else st.warning(
-            "Tidak ada yang dianalisis. Pastikan model emosi tersedia: "
-            "`python tools/setup_local_models.py --emotion`")
+        # if/else biasa — BUKAN ekspresi kondisional sebagai pernyataan. Streamlit
+        # "magic" akan menulis nilai ekspresi telanjang, lalu mencoba membaca nama
+        # variabel dari SATU baris sumber; pernyataan multi-baris membuatnya gagal
+        # parse (SyntaxError "'(' was never closed").
+        if n:
+            st.success(f"{n} dokumen dianalisis.")
+        else:
+            st.warning("Tidak ada yang dianalisis. Pastikan model emosi tersedia: "
+                       "`python tools/setup_local_models.py --emotion`")
         load_docs.clear()
         st.rerun()
 
