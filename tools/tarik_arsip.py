@@ -67,18 +67,25 @@ def _kunci_jalan(path: str, paksa: bool = False, kedaluwarsa_jam: float = 6.0):
         json.dump({"pid": os.getpid(), "mulai": time.time()}, f)
 
 
-def _isi_penuh(docs: list, pekerja: int = 12) -> int:
+def _isi_penuh(docs: list, pekerja: int = 12, kata_kunci: list = None) -> int:
     """Ambil isi artikel dari situs aslinya, paralel secukupnya. -> jumlah berhasil."""
     from collectors.news_rss import _full_text
     if not docs:
         return 0
 
+    from collectors.base import match_keywords
+
     def satu(d):
         teks = _full_text(d.url)
+        berhasil = 0
         if teks and len(teks) > len(d.content or ""):
             d.content = teks
-            return 1
-        return 0
+            berhasil = 1
+        # Label ulang setelah isi artikel ada: GDELT hanya memberi judul, jadi
+        # kata kunci yang muncul di badan berita baru ketahuan di sini.
+        if kata_kunci:
+            d.keywords_matched = match_keywords(f"{d.title} {d.content}", kata_kunci)
+        return berhasil
 
     with ThreadPoolExecutor(max_workers=pekerja) as ex:
         return sum(ex.map(satu, docs))
@@ -125,7 +132,7 @@ def tarik(kata: list, mulai: str, akhir: str, lang: str = "id", jendela: int = 1
             return False
         t_gdelt = time.time() - t0
         t1 = time.time()
-        n_isi = _isi_penuh(docs, pekerja) if (isi_penuh and docs) else 0
+        n_isi = _isi_penuh(docs, pekerja, kata) if (isi_penuh and docs) else 0
         t_isi = time.time() - t1
         baru = store.save_documents(docs)
         hitung["artikel"] += len(docs)

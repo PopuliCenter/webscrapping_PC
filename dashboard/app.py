@@ -344,6 +344,11 @@ with st.sidebar:
     # yang jumlahnya jauh lebih banyak akan mendominasi dan menyesatkan.
     df["_kata"] = kata_kunci_dokumen(df)
     semua_kata = sorted({k for daftar in df["_kata"] for k in daftar})
+    # Dokumen tanpa kata kunci dibuat terlihat sebagai pilihan tersendiri.
+    # Sebelumnya ia selalu ikut tampil diam-diam — berita nyasar jadi terhitung.
+    TANPA = "(tanpa kata kunci)"
+    if (df["_kata"].map(len) == 0).any():
+        semua_kata.append(TANPA)
     kata_aktif = [k for k in (_cfg().get("keywords") or []) if k in semua_kata]
     if semua_kata:
         pakai_aktif = st.checkbox(
@@ -384,9 +389,10 @@ with st.sidebar:
     panel_rem()
 
 f = df[df["platform"].isin(sel_plat) & df["sentiment_label"].isin(sel_sent)]
-if sel_kata:                       # dokumen tanpa kata kunci ikut bila semua dipilih
+if sel_kata:
     pilih = set(sel_kata)
-    f = f[f["_kata"].map(lambda ks: bool(pilih & set(ks)) or not ks)]
+    tanpa_ikut = "(tanpa kata kunci)" in pilih
+    f = f[f["_kata"].map(lambda ks: bool(pilih & set(ks)) or (tanpa_ikut and not ks))]
 if isinstance(rentang, (tuple, list)) and len(rentang) == 2 and f["dt"].notna().any():
     awal = pd.Timestamp(rentang[0], tz="UTC")
     akhir = pd.Timestamp(rentang[1], tz="UTC") + pd.Timedelta(days=1)

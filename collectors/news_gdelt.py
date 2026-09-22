@@ -108,6 +108,11 @@ def collect(keywords: List[str], lang: str = "id", timespan: str = "1d",
     for art in data.get("articles", []):
         title = clean_text(art.get("title", ""))
         url = art.get("url", "")
+        # Simpan kata kunci yang BENAR muncul saja. Dulu di sini ada fallback
+        # "matched or keywords": artikel yang judulnya tak memuat kata kunci apa
+        # pun diberi SEMUA kata kunci, sehingga berita nyasar ikut terhitung
+        # sebagai topik yang dipantau. Kosong lebih jujur daripada salah label;
+        # tools/tarik_arsip.py melabeli ulang setelah isi artikel terambil.
         matched = match_keywords(title, keywords)
         docs.append(Document(
             platform="news",
@@ -117,7 +122,7 @@ def collect(keywords: List[str], lang: str = "id", timespan: str = "1d",
             content=title,  # GDELT ArtList hanya beri judul; isi penuh via news_rss/trafilatura
             lang=lang,
             published_at=art.get("seendate", ""),
-            keywords_matched=matched or keywords,
+            keywords_matched=matched,
             raw={"gdelt": True, "language": art.get("language", "")},
         ))
     return docs
