@@ -185,6 +185,41 @@ schedule:
 
 ---
 
+## 4b. Laporan otomatis
+
+Sekali jalan:
+```powershell
+python tools/laporan.py --hari 7
+```
+Menghasilkan `laporan/<tanggal>/` berisi `ringkasan.md` (siap disalin ke email/WA),
+`laporan.xlsx` (Share of Voice, Media, Sentimen harian, Entitas, Kutipan, Dokumen),
+`laporan.html` (Ctrl+P → simpan sebagai PDF), dan 3 grafik PNG.
+Bisa juga dari dashboard: tab **📣 Share of Voice** → tombol **Buat laporan**.
+
+**Terjadwal tiap hari** — scheduler membuatnya sendiri:
+```yaml
+laporan:
+  enabled: true
+  jam: "07:00"          # waktu Asia/Jakarta; ubah -> restart scheduler
+  hari_terakhir: 1
+```
+
+**Kirim lewat email (opsional, MATI secara bawaan).** Mengirim email tidak bisa
+ditarik kembali, jadi butuh tiga kunci yang kamu buka sendiri:
+1. `laporan.email.enabled: true`
+2. `secrets/email.yaml` terisi (salin dari `secrets/email.yaml.example`)
+3. `laporan.email.penerima` tidak kosong
+
+Bila salah satu belum lengkap, laporan tetap dibuat ke folder dan pengiriman
+dilewati dengan pesan jelas — bukan gagal diam-diam. Untuk Gmail wajib memakai
+**App Password**, bukan kata sandi akun.
+
+> Laporan hanya jalan bila `scheduler.py` (atau container `scheduler`) hidup.
+> Alternatif tanpa scheduler: jadwalkan `tools/laporan.py` lewat Task Scheduler
+> Windows.
+
+---
+
 ## 5. Mengaktifkan X / Twitter
 
 Ada 2 jalur, diatur di `config.yaml → x.method`:

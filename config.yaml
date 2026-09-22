@@ -89,6 +89,18 @@ schedule:
   x_minutes: 60           # tarik X tiap N menit
   ig_minutes: 120         # tarik Instagram tiap N menit
 
+# ── Laporan otomatis ─────────────────────────────────────────
+# Scheduler membuat laporan harian ke folder laporan/<tanggal>/.
+laporan:
+  enabled: false          # true = laporan dibuat otomatis tiap hari
+  jam: "07:00"            # waktu lokal (Asia/Jakarta); ubah -> restart scheduler
+  hari_terakhir: 1        # rentang data yang dilaporkan (1 = sehari terakhir)
+  # Mengirim email TIDAK bisa ditarik kembali, jadi matikan secara bawaan.
+  # Nyalakan hanya setelah secrets/email.yaml terisi dan penerima benar.
+  email:
+    enabled: false
+    penerima: []          # mis. ["nama@kantor.co.id"]
+
 # ── Penyimpanan ──────────────────────────────────────────────
 storage:
   db_path: "data/monitoring.db"

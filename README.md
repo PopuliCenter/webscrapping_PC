@@ -20,7 +20,7 @@ pendekatan [Drone Emprit](https://pers.droneemprit.id/). Dirancang untuk
 | **Multi-sumber** | RSS media + GDELT (berita), X/Twitter, Instagram, Facebook |
 | **Tarik arsip** | Berita **lama** per kata kunci & rentang tanggal (GDELT), lewat CLI atau dashboard |
 | **Share of Voice** | Porsi pemberitaan per pihak/isu + indeks nada, dihitung per dokumen; sindikasi dihitung sekali |
-| **Laporan otomatis** | Ringkasan siap kirim + Excel + grafik + HTML siap cetak PDF (`tools/laporan.py`) |
+| **Laporan otomatis** | Ringkasan siap kirim + Excel + grafik + HTML siap cetak PDF (`tools/laporan.py`), bisa **terjadwal harian** & dikirim email (opt-in) |
 | **Bobot media** | Tier media (`resources/media_tier.csv`) → share of voice berbobot, bukan sekadar jumlah |
 | **Entitas & kutipan** | Tokoh/lembaga yang disebut + **siapa bilang apa** (kutipan langsung + pengucapnya) |
 | **Preprocessing Bahasa Indonesia** | Hapus URL/mention/emoji/angka, normalisasi kata baku (slang→baku), stopword ID, **stemming Sastrawi**, penanganan **negasi** (`tidak bagus`→`tidak_bagus`), near-duplicate |
