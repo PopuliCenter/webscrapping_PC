@@ -12,12 +12,20 @@ from .preprocess import Preprocessor
 
 
 def word_freq(texts: Iterable[str], p: Optional[Preprocessor] = None,
-              top_n: int = 50) -> list:
-    """Frekuensi kata setelah preprocessing. -> [(kata, jumlah), ...]"""
+              top_n: int = 50, per_dokumen: bool = False) -> list:
+    """Frekuensi kata setelah preprocessing. -> [(kata, jumlah), ...]
+
+    `per_dokumen=True` menghitung tiap kata SEKALI per dokumen (document
+    frequency). Ini penting untuk media monitoring: satu artikel panjang yang
+    mengulang sebuah kata puluhan kali bisa mendominasi word cloud dan membuat
+    isu kecil terlihat besar. Contoh nyata: kata "kpk" muncul 92 kali padahal
+    hanya berasal dari SATU berita daftar OTT.
+    """
     pp = p or Preprocessor()
     c = Counter()
     for t in texts:
-        c.update(pp.tokens(t))
+        tok = pp.tokens(t)
+        c.update(set(tok) if per_dokumen else tok)
     return c.most_common(top_n)
 
 
@@ -34,12 +42,17 @@ def ngrams(texts: Iterable[str], n: int = 2, p: Optional[Preprocessor] = None,
     return c.most_common(top_n)
 
 
-def freq_dict(texts: Iterable[str], p: Optional[Preprocessor] = None) -> dict:
-    """Kamus {kata: jumlah} — format yang dibutuhkan WordCloud."""
+def freq_dict(texts: Iterable[str], p: Optional[Preprocessor] = None,
+              per_dokumen: bool = False) -> dict:
+    """Kamus {kata: jumlah} — format yang dibutuhkan WordCloud.
+
+    `per_dokumen=True`: satu kata dihitung sekali per dokumen (lihat word_freq).
+    """
     pp = p or Preprocessor()
     c = Counter()
     for t in texts:
-        c.update(pp.tokens(t))
+        tok = pp.tokens(t)
+        c.update(set(tok) if per_dokumen else tok)
     return dict(c)
 
 

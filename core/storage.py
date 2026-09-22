@@ -64,6 +64,9 @@ KOLOM_ANALISIS = {
     # Rincian sentimen per paragraf (berita panjang) — lihat analysis/sentiment.py
     "bagian_total": "INTEGER", "bagian_negatif": "INTEGER",
     "bagian_positif": "INTEGER", "kutipan_negatif": "TEXT",
+    # Berita sindikasi: berisi doc_id berita UTAMA bila dokumen ini hanya
+    # salinan. Kosong = berita unik. Diisi tools/dedup_sindikasi.py.
+    "duplikat_dari": "TEXT",
 }
 
 

@@ -57,8 +57,8 @@ def get_preprocessor(stem: bool = True) -> Preprocessor:
 
 
 @st.cache_data(ttl=300)
-def cached_freq(texts: tuple, stem: bool) -> dict:
-    return textstats.freq_dict(list(texts), get_preprocessor(stem))
+def cached_freq(texts: tuple, stem: bool, per_dokumen: bool = False) -> dict:
+    return textstats.freq_dict(list(texts), get_preprocessor(stem), per_dokumen)
 
 
 # ── Panel kata kunci ────────────────────────────────────────────
@@ -375,6 +375,21 @@ with st.sidebar:
     else:
         rentang = ()
 
+    # Berita sindikasi: satu rilis dimuat banyak media. Bila salinan ikut
+    # dihitung, volume & sentimen satu isu terhitung berulang kali.
+    n_salinan = int(df["duplikat_dari"].fillna("").astype(str).str.len().gt(0).sum()) \
+        if "duplikat_dari" in df.columns else 0
+    gabung_sindikasi = st.checkbox(
+        f"Gabungkan berita sindikasi ({n_salinan} salinan)", value=bool(n_salinan),
+        disabled=not n_salinan,
+        help="Satu rilis yang dimuat ulang banyak media dihitung SEKALI. "
+             "Tandai dulu lewat: python tools/dedup_sindikasi.py --yakin")
+
+    hitung_per_dokumen = st.checkbox(
+        "Hitung kata per dokumen", value=True,
+        help="Tiap kata dihitung sekali per berita, supaya satu artikel panjang "
+             "tidak mendominasi word cloud.")
+
     plats = sorted(df["platform"].dropna().unique().tolist())
     sel_plat = st.multiselect("Platform", plats, default=plats)
     sents = ["positive", "neutral", "negative"]
@@ -397,6 +412,8 @@ if isinstance(rentang, (tuple, list)) and len(rentang) == 2 and f["dt"].notna().
     awal = pd.Timestamp(rentang[0], tz="UTC")
     akhir = pd.Timestamp(rentang[1], tz="UTC") + pd.Timedelta(days=1)
     f = f[f["dt"].isna() | ((f["dt"] >= awal) & (f["dt"] < akhir))]
+if gabung_sindikasi and "duplikat_dari" in f.columns:
+    f = f[f["duplikat_dari"].fillna("").astype(str).str.len() == 0]
 teks_terpilih = tuple(f["teks"].dropna().tolist())
 
 if len(f) != len(df):
@@ -533,7 +550,7 @@ with tab_teks:
             st.info("Tidak ada data untuk pilihan ini.")
         else:
             with st.spinner("Memproses teks..."):
-                freq = cached_freq(texts_sub, pakai_stem)
+                freq = cached_freq(texts_sub, pakai_stem, hitung_per_dokumen)
 
             if not freq:
                 st.info("Tidak ada kata tersisa setelah preprocessing.")
