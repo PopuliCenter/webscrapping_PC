@@ -8,18 +8,38 @@ from typing import Iterable
 _kw_cache: dict = {}
 
 
+def singkatan_kapital(kw: str) -> bool:
+    """True untuk singkatan HURUF BESAR pendek: AS, PBB, MK, DPR.
+
+    Kata seperti "AS" kalau dicocokkan tanpa peduli huruf besar-kecil akan ikut
+    cocok pada kata Indonesia "as" (poros) dan kata Inggris "as" — berita Cak
+    Imin dan FIFA ASEAN Cup pun tersaring masuk. Karena itu singkatan kapital
+    dicocokkan PERSIS hurufnya. Kata kunci biasa tetap bebas huruf besar-kecil.
+    """
+    k = kw.strip()
+    return 1 < len(k) <= 5 and k.isupper() and k.isalpha()
+
+
 def _kw_pattern(kw: str):
     """Pola batas-kata, di-cache. Hindari 'ikn' cocok di dalam 'detikNews'."""
     pat = _kw_cache.get(kw)
     if pat is None:
+        k = kw.strip()
         # \b longgar untuk frasa berspasi; ketat untuk token tunggal.
-        pat = re.compile(r"(?<!\w)" + re.escape(kw.lower().strip()) + r"(?!\w)")
+        if singkatan_kapital(k):
+            pat = re.compile(r"(?<!\w)" + re.escape(k) + r"(?!\w)")
+        else:
+            pat = re.compile(r"(?<!\w)" + re.escape(k.lower()) + r"(?!\w)")
         _kw_cache[kw] = pat
     return pat
 
 
 def match_keywords(text: str, keywords: Iterable[str]) -> list:
-    """Kembalikan daftar keyword yang muncul (case-insensitive, batas kata)."""
+    """Kembalikan daftar keyword yang muncul (batas kata).
+
+    Bebas huruf besar-kecil, KECUALI singkatan kapital (lihat
+    `singkatan_kapital`) yang harus sama persis.
+    """
     if not text:
         return []
     low = text.lower()
@@ -28,7 +48,9 @@ def match_keywords(text: str, keywords: Iterable[str]) -> list:
         k = kw.strip()
         if not k:
             continue
-        if _kw_pattern(k).search(low):
+        # singkatan kapital dicari di teks ASLI (huruf besar berarti), sisanya
+        # di teks yang sudah dikecilkan
+        if _kw_pattern(k).search(text if singkatan_kapital(k) else low):
             hits.append(kw)
     return hits
 

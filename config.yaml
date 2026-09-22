@@ -6,6 +6,7 @@
 # Kata kunci yang dipantau. Dipakai untuk filter & query GDELT.
 # Cocokkan case-insensitive terhadap judul + isi.
 keywords:
+  - "AS"
   - "Amerika Serikat"
   - "Iran"
   - "Selat Hormuz"
@@ -22,6 +23,10 @@ news:
     - "https://www.cnnindonesia.com/nasional/rss"
     - "https://www.republika.co.id/rss"
     - "https://news.detik.com/berita/rss"
+    - "https://www.cnnindonesia.com/internasional/rss"
+    - "https://news.detik.com/internasional/rss"
+    - "https://rss.tempo.co/dunia"
+    - "https://www.republika.co.id/rss/internasional"
 
   # GDELT Doc API (gratis, tanpa key). Cari berita global per kata kunci.
   gdelt:
