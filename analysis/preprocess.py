@@ -286,9 +286,12 @@ class Preprocessor:
         t = self.cleanse(self.case_fold(text))
         toks = t.split()
         toks = self.normalize(toks)
-        toks = self.filter_stopwords(toks)
+        # Negasi digabung SEBELUM stopword dibuang. Bila dibalik, kata di antara
+        # negasi dan sasarannya hilang lebih dulu, lalu negasi menempel ke kata
+        # yang salah: "gak bgt sih harga naik" pernah menghasilkan "tidak_harga".
         toks = self.stem(toks)
         toks = self.join_negation(toks)
+        toks = self.filter_stopwords(toks)
         return [t for t in toks if len(t) >= self.min_token_len]
 
     def clean(self, text: str) -> str:
@@ -300,18 +303,18 @@ class Preprocessor:
         cleansed = self.cleanse(folded)
         tok = cleansed.split()
         normalized = self.normalize(tok)
-        no_stop = self.filter_stopwords(normalized)
-        stemmed = self.stem(no_stop)
+        stemmed = self.stem(normalized)
         merged = self.join_negation(stemmed)
+        no_stop = self.filter_stopwords(merged)
         return {
             "0_asli": text,
             "1_case_folding": folded,
             "2_cleansing": cleansed,
             "3_tokenizing": tok,
             "4_normalisasi_baku": normalized,
-            "5_stopword_removal": no_stop,
-            "6_stemming": stemmed,
-            "7_gabung_negasi": merged,
+            "5_stemming": stemmed,
+            "6_gabung_negasi": merged,
+            "7_stopword_removal": no_stop,
         }
 
 
