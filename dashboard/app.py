@@ -420,10 +420,10 @@ if len(f) != len(df):
     st.caption(f"Menampilkan **{len(f)}** dari {len(df)} dokumen di database "
                f"(filter kata kunci / tanggal / platform / sentimen aktif).")
 
-(tab_ring, tab_topik, tab_teks, tab_heat, tab_sna, tab_bot, tab_ml,
+(tab_ring, tab_sov, tab_topik, tab_teks, tab_heat, tab_sna, tab_bot, tab_ml,
  tab_emo, tab_nuansa, tab_hf, tab_label) = st.tabs(
-    ["📊 Ringkasan", "📈 Topik", "☁️ Teks & Word Cloud", "🔥 Heatmap",
-     "🕸️ Jaringan", "🤖 Bot/Buzzer", "🧪 Klasifikasi ML",
+    ["📊 Ringkasan", "📣 Share of Voice", "📈 Topik", "☁️ Teks & Word Cloud",
+     "🔥 Heatmap", "🕸️ Jaringan", "🤖 Bot/Buzzer", "🧪 Klasifikasi ML",
      "😠 Emosi", "🎯 Intent & Sarkasme", "🔬 Banding Model", "🏷️ Pelabelan"])
 
 
@@ -470,6 +470,90 @@ with tab_ring:
                        "bagian negatif", "kutipan paling negatif"]]
             .rename(columns={"sentiment_label": "sentimen", "sentiment_score": "nilai"}),
             width="stretch", hide_index=True)
+
+
+# ── TAB: Share of Voice & laporan ───────────────────────────────
+with tab_sov:
+    st.subheader("📣 Share of Voice")
+    st.caption("Porsi pemberitaan tiap pihak/isu beserta nadanya. Dihitung per "
+               "DOKUMEN (bukan per kemunculan kata) dan mengikuti filter di "
+               "sidebar, termasuk penggabungan berita sindikasi.")
+
+    from analysis import sov as _sov
+
+    entitas_teks = st.text_area(
+        "Pihak / isu yang dibandingkan (satu per baris)",
+        "\n".join(_cfg().get("keywords") or []), height=90, key="sov_entitas",
+        help="Boleh apa saja, tidak harus kata kunci scraping — mis. nama tokoh, "
+             "lembaga, atau merek yang ingin dibandingkan porsinya.")
+    entitas = [b.strip() for b in entitas_teks.splitlines() if b.strip()]
+
+    saring = st.checkbox(
+        "Saring berita yang hanya menyinggung sekilas", value=True,
+        help="Berita dianggap relevan bila kata kunci ada di judul atau disebut "
+             "minimal 2 kali. Tanpa ini, 'dolar AS' di berita judi ikut terhitung.")
+
+    if not entitas:
+        st.info("Isi minimal satu pihak/isu di atas.")
+    elif f.empty:
+        st.info("Tidak ada dokumen pada filter saat ini.")
+    else:
+        dasar = f.copy()
+        dibuang = 0
+        if saring:
+            dasar, dibuang = _sov.saring_relevan(dasar, entitas)
+        if dasar.empty:
+            st.warning("Semua dokumen tersaring. Longgarkan filter atau matikan "
+                       "saringan relevansi.")
+        else:
+            tabel_sov = _sov.hitung(dasar, entitas)
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Dokumen dianalisis", len(dasar))
+            c2.metric("Disaring (sekilas)", dibuang)
+            c3.metric("Media", int(dasar["source"].nunique()))
+            st.dataframe(tabel_sov, width="stretch", hide_index=True)
+            st.caption("Satu berita bisa menyebut beberapa pihak, jadi jumlah "
+                       "share bisa melebihi 100%. Indeks nada: "
+                       "(positif − negatif) ÷ jumlah berita.")
+
+            tren_sov = _sov.tren(dasar, entitas)
+            if not tren_sov.empty and len(tren_sov) > 1:
+                st.markdown("**Tren jumlah berita per hari**")
+                st.line_chart(tren_sov)
+
+            lonj = _sov.lonjakan(dasar)
+            if lonj and lonj.get("lonjakan"):
+                st.warning(f"⚠️ Lonjakan volume {lonj['tanggal']}: {lonj['jumlah']} "
+                           f"berita, {lonj['rasio']}× rata-rata ({lonj['rata_rata']}/hari).")
+            elif lonj and lonj.get("catatan"):
+                st.info(f"Deteksi lonjakan belum berlaku: {lonj['catatan']}.")
+
+    st.divider()
+    st.markdown("**📄 Laporan otomatis**")
+    st.caption("Membuat folder berisi ringkasan siap kirim, Excel, grafik, dan "
+               "halaman HTML yang bisa dicetak jadi PDF.")
+    hari_lap = st.number_input("Rentang (hari ke belakang)", 1, 365, 7, key="lap_hari")
+    if st.button("Buat laporan", width="stretch", key="lap_buat"):
+        import subprocess
+        proyek = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with st.spinner("Menyusun laporan..."):
+            p = subprocess.run(
+                [sys.executable, "-u", "tools/laporan.py", "--hari", str(hari_lap),
+                 *(["--entitas", *entitas] if entitas else [])],
+                cwd=proyek, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=1800)
+        st.code((p.stdout or "") + (p.stderr or ""))
+        if p.returncode == 0:
+            import datetime as _dt
+            folder = os.path.join(proyek, "laporan", _dt.date.today().isoformat())
+            for nama in ("ringkasan.md", "laporan.xlsx", "laporan.html"):
+                jalur = os.path.join(folder, nama)
+                if os.path.isfile(jalur):
+                    with open(jalur, "rb") as fh:
+                        st.download_button(f"⬇️ {nama}", fh.read(), file_name=nama,
+                                           key=f"unduh_{nama}")
+        else:
+            st.error("Gagal membuat laporan — lihat pesan di atas.")
 
 
 # ── TAB 2: Tren per topik ───────────────────────────────────────
