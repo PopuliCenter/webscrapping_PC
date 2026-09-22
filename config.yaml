@@ -6,7 +6,7 @@
 # Kata kunci yang dipantau. Dipakai untuk filter & query GDELT.
 # Cocokkan case-insensitive terhadap judul + isi.
 keywords:
-  - "AS"
+  - "Amerika Serikat"
   - "Iran"
   - "Selat Hormuz"
 

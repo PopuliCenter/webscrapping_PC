@@ -111,9 +111,12 @@ def panel_arsip():
     with st.expander("🗓️ Tarik berita lama (arsip)", expanded=False):
         st.caption("RSS hanya memuat berita terbaru. Untuk berita yang sudah lewat, "
                    "dipakai arsip GDELT — dibatasi kata kunci dan rentang tanggal.")
-        kata = st.text_area("Kata kunci (satu per baris)",
-                            "\n".join(baca_list(cfg_path, ["keywords"])),
-                            height=80, key="arsip_kata")
+        # Kunci widget ikut isi config: begitu config.yaml berubah (mis. lewat
+        # panel Kata kunci), kotak ini ikut berubah. Tanpa itu Streamlit menahan
+        # teks lama di session dan kamu menarik arsip dengan kata kunci usang.
+        kata_cfg = baca_list(cfg_path, ["keywords"])
+        kata = st.text_area("Kata kunci (satu per baris)", "\n".join(kata_cfg),
+                            height=80, key=f"arsip_kata_{hash(tuple(kata_cfg))}")
         hari_ini = _dt.date.today()
         k1, k2 = st.columns(2)
         d_mulai = k1.date_input("Dari", hari_ini - _dt.timedelta(days=14),
@@ -271,9 +274,10 @@ def panel_kata_kunci():
         with st.form("form_kata_kunci"):
             isian = {}
             for judul, path, bantuan in SUMBER_KATA_KUNCI:
+                nilai_cfg = baca_list(cfg_path, path)
                 isian[tuple(path)] = st.text_area(
-                    judul, "\n".join(baca_list(cfg_path, path)),
-                    height=90, help=bantuan, key="kk_" + "_".join(path))
+                    judul, "\n".join(nilai_cfg), height=90, help=bantuan,
+                    key=f"kk_{'_'.join(path)}_{hash(tuple(nilai_cfg))}")
             simpan = st.form_submit_button("Simpan", width="stretch")
         if simpan:
             ubah = []
@@ -320,8 +324,52 @@ if df.empty:
     st.warning("Database masih kosong. Jalankan `python run_once.py`.")
     st.stop()
 
+def kata_kunci_dokumen(d: pd.DataFrame) -> pd.Series:
+    """Daftar kata kunci yang mencocokkan tiap dokumen (dari kolom keywords_matched)."""
+    def urai(v):
+        try:
+            hasil = json.loads(v) if isinstance(v, str) and v.strip() else []
+        except Exception:
+            hasil = []
+        return [str(x) for x in hasil] if isinstance(hasil, list) else []
+    return d["keywords_matched"].map(urai) if "keywords_matched" in d.columns \
+        else pd.Series([[]] * len(d), index=d.index)
+
+
 with st.sidebar:
     st.header("Filter")
+
+    # Database menyimpan SEMUA yang pernah ditarik, termasuk kata kunci lama.
+    # Tanpa filter ini, mengganti kata kunci tidak mengubah tampilan: topik lama
+    # yang jumlahnya jauh lebih banyak akan mendominasi dan menyesatkan.
+    df["_kata"] = kata_kunci_dokumen(df)
+    semua_kata = sorted({k for daftar in df["_kata"] for k in daftar})
+    kata_aktif = [k for k in (_cfg().get("keywords") or []) if k in semua_kata]
+    if semua_kata:
+        pakai_aktif = st.checkbox(
+            "Hanya kata kunci aktif", value=bool(kata_aktif),
+            help="Database memuat semua penarikan sebelumnya. Centang agar hanya "
+                 "topik di config.yaml yang ditampilkan.")
+        sel_kata = st.multiselect(
+            "Kata kunci", semua_kata,
+            default=(kata_aktif if (pakai_aktif and kata_aktif) else semua_kata))
+        tertinggal = [k for k in semua_kata if k not in sel_kata]
+        if tertinggal:
+            st.caption(f"{len(tertinggal)} kata kunci lain disembunyikan: "
+                       f"{', '.join(tertinggal[:5])}{'...' if len(tertinggal) > 5 else ''}")
+    else:
+        sel_kata = []
+
+    if df["dt"].notna().any():
+        tmin = df["dt"].min().date()
+        tmaks = df["dt"].max().date()
+        rentang = st.date_input("Rentang tanggal", (tmin, tmaks),
+                                min_value=tmin, max_value=tmaks,
+                                help="Batasi periode; berguna setelah menarik arsip "
+                                     "rentang lain.")
+    else:
+        rentang = ()
+
     plats = sorted(df["platform"].dropna().unique().tolist())
     sel_plat = st.multiselect("Platform", plats, default=plats)
     sents = ["positive", "neutral", "negative"]
@@ -336,7 +384,18 @@ with st.sidebar:
     panel_rem()
 
 f = df[df["platform"].isin(sel_plat) & df["sentiment_label"].isin(sel_sent)]
+if sel_kata:                       # dokumen tanpa kata kunci ikut bila semua dipilih
+    pilih = set(sel_kata)
+    f = f[f["_kata"].map(lambda ks: bool(pilih & set(ks)) or not ks)]
+if isinstance(rentang, (tuple, list)) and len(rentang) == 2 and f["dt"].notna().any():
+    awal = pd.Timestamp(rentang[0], tz="UTC")
+    akhir = pd.Timestamp(rentang[1], tz="UTC") + pd.Timedelta(days=1)
+    f = f[f["dt"].isna() | ((f["dt"] >= awal) & (f["dt"] < akhir))]
 teks_terpilih = tuple(f["teks"].dropna().tolist())
+
+if len(f) != len(df):
+    st.caption(f"Menampilkan **{len(f)}** dari {len(df)} dokumen di database "
+               f"(filter kata kunci / tanggal / platform / sentimen aktif).")
 
 (tab_ring, tab_topik, tab_teks, tab_heat, tab_sna, tab_bot, tab_ml,
  tab_emo, tab_nuansa, tab_hf, tab_label) = st.tabs(
