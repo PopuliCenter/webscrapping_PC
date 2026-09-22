@@ -6,8 +6,9 @@
 # Kata kunci yang dipantau. Dipakai untuk filter & query GDELT.
 # Cocokkan case-insensitive terhadap judul + isi.
 keywords:
-  - "Prabowo"
-  - "Purbaya"
+  - "AS"
+  - "Iran"
+  - "Selat Hormuz"
 
 # Bahasa target untuk filter (kosongkan untuk semua).
 language: "id"
@@ -35,9 +36,7 @@ news:
 x:
   enabled: true
   method: "auto"          # twikit | service | auto (twikit dulu, fallback service)
-  search_queries:         # query pencarian X (boleh beda dari keyword global)
-    - "Prabowo"
-    - "Purbaya"
+  search_queries: []   # query pencarian X (boleh beda dari keyword global)
   tweets_per_query: 50
   product: "Latest"       # Latest | Top
   daily_limit: 300        # maks tweet per HARI (0 = tanpa batas)

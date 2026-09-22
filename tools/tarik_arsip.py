@@ -43,7 +43,31 @@ def _jendela(mulai: datetime, akhir: datetime, hari: int):
     return potong
 
 
-def _isi_penuh(docs: list, pekerja: int = 6) -> int:
+def _kunci_jalan(path: str, paksa: bool = False, kedaluwarsa_jam: float = 6.0):
+    """Cegah dua penarikan berjalan bersamaan (mis. tombol tertekan dua kali).
+
+    Dua proses menembak GDELT sekaligus justru saling memicu 429 dan membuat
+    keduanya lebih lambat. Kunci dianggap basi setelah beberapa jam supaya
+    proses yang mati mendadak tidak memblokir selamanya.
+    """
+    import json
+    if os.path.isfile(path) and not paksa:
+        try:
+            isi = json.load(open(path, encoding="utf-8"))
+            umur = (time.time() - float(isi.get("mulai", 0))) / 3600
+        except Exception:
+            umur = 999
+        if umur < kedaluwarsa_jam:
+            raise SystemExit(
+                f"Penarikan arsip lain sedang berjalan (mulai {umur * 60:.0f} menit lalu, "
+                f"PID {isi.get('pid', '?')}).\n"
+                f"Tunggu sampai selesai, atau pakai --paksa bila yakin sudah mati.")
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"pid": os.getpid(), "mulai": time.time()}, f)
+
+
+def _isi_penuh(docs: list, pekerja: int = 12) -> int:
     """Ambil isi artikel dari situs aslinya, paralel secukupnya. -> jumlah berhasil."""
     from collectors.news_rss import _full_text
     if not docs:
@@ -62,7 +86,7 @@ def _isi_penuh(docs: list, pekerja: int = 6) -> int:
 
 def tarik(kata: list, mulai: str, akhir: str, lang: str = "id", jendela: int = 1,
           maks: int = 250, isi_penuh: bool = True, db_path: str = "",
-          analisis: bool = True) -> dict:
+          analisis: bool = True, pekerja: int = 12, paksa: bool = False) -> dict:
     import yaml
     from collectors import news_gdelt
     from core.storage import Storage
@@ -78,31 +102,39 @@ def tarik(kata: list, mulai: str, akhir: str, lang: str = "id", jendela: int = 1
     if d1 >= d2:
         raise SystemExit("Tanggal mulai harus sebelum tanggal akhir.")
     potong = _jendela(d1, d2, max(1, jendela))
+    _kunci_jalan(os.path.join(PROJECT_DIR, "data", ".arsip_berjalan.json"), paksa)
     store = Storage(db_path)
 
     print(f"Kata kunci : {', '.join(kata)}")
     print(f"Rentang    : {mulai} s/d {akhir}  ({len(potong)} jendela x {jendela} hari)")
+    print(f"Isi artikel: {'ya, ' + str(pekerja) + ' paralel' if isi_penuh else 'tidak (judul saja)'}")
+    t_mulai = time.time()
 
     hitung = {"artikel": 0, "baru": 0, "isi": 0}
 
     def satu_jendela(a, b, label: str) -> bool:
         """-> True bila permintaan berhasil (walau nol artikel)."""
+        t0 = time.time()
         try:
             docs = news_gdelt.collect(kata, lang, max_records=maks,
                                       mulai=a.strftime("%Y%m%d%H%M%S"),
                                       akhir=b.strftime("%Y%m%d%H%M%S"),
                                       percobaan=4, jeda=8, ketat=True)
         except news_gdelt.GdeltGagal as e:
-            print(f"  {label} {a:%Y-%m-%d}: GAGAL ({e}) — akan diulang")
+            print(f"  {label} {a:%Y-%m-%d}: GAGAL ({e}) — akan diulang", flush=True)
             return False
-        n_isi = _isi_penuh(docs) if (isi_penuh and docs) else 0
+        t_gdelt = time.time() - t0
+        t1 = time.time()
+        n_isi = _isi_penuh(docs, pekerja) if (isi_penuh and docs) else 0
+        t_isi = time.time() - t1
         baru = store.save_documents(docs)
         hitung["artikel"] += len(docs)
         hitung["baru"] += baru
         hitung["isi"] += n_isi
         tanda = "  <- mungkin terpotong, kecilkan --jendela" if len(docs) >= maks else ""
-        print(f"  {label} {a:%Y-%m-%d}: {len(docs):>3} artikel, "
-              f"{baru:>3} baru, isi penuh {n_isi}{tanda}")
+        print(f"  {label} {a:%Y-%m-%d}: {len(docs):>3} artikel, {baru:>3} baru, "
+              f"isi penuh {n_isi} ({t_gdelt:.0f}s cari + {t_isi:.0f}s isi){tanda}",
+              flush=True)
         return True
 
     gagal = []
@@ -123,8 +155,9 @@ def tarik(kata: list, mulai: str, akhir: str, lang: str = "id", jendela: int = 1
                 masih.append((a, b))
         gagal = masih
 
+    menit = (time.time() - t_mulai) / 60
     print(f"\nTotal: {hitung['artikel']} artikel, {hitung['baru']} baru disimpan, "
-          f"{hitung['isi']} berisi teks penuh")
+          f"{hitung['isi']} berisi teks penuh — {menit:.1f} menit")
     if gagal:
         tanggal = ", ".join(f"{a:%Y-%m-%d}" for a, _ in gagal[:8])
         print(f"PERINGATAN: {len(gagal)} jendela tetap gagal ({tanggal}"
@@ -139,6 +172,10 @@ def tarik(kata: list, mulai: str, akhir: str, lang: str = "id", jendela: int = 1
         n = analyze_sentiment(cfg, store)
         print(f"Sentimen dianalisis: {n} dokumen")
     print("Statistik DB:", store.stats())
+    try:                                        # lepaskan kunci agar bisa dijalankan lagi
+        os.remove(os.path.join(PROJECT_DIR, "data", ".arsip_berjalan.json"))
+    except OSError:
+        pass
     return {"artikel": total_art, "baru": total_baru, "isi_penuh": total_isi,
             "jendela_gagal": [a.strftime("%Y-%m-%d") for a, _ in gagal]}
 
@@ -165,4 +202,6 @@ if __name__ == "__main__":
           jendela=int(opsi("--jendela", 1)),
           maks=int(opsi("--maks", 250)),
           isi_penuh="--tanpa-isi" not in a,
-          analisis="--tanpa-analisis" not in a)
+          analisis="--tanpa-analisis" not in a,
+          pekerja=int(opsi("--pekerja", 12)),
+          paksa="--paksa" in a)

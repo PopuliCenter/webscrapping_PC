@@ -126,27 +126,68 @@ def panel_arsip():
                                 key="arsip_isi")
         hari = (d_akhir - d_mulai).days + 1
         if hari > 0:
-            st.caption(f"{hari} hari ≈ {hari * 8 // 60} menit {hari * 8 % 60} detik "
-                       f"(GDELT dibatasi lajunya, jadi ada jeda tiap hari)")
-        if st.button("⬇️ Tarik arsip", width="stretch", key="arsip_jalan"):
+            # Perkiraan diukur dari pemakaian nyata: mengambil isi artikel jauh
+            # lebih mahal daripada mencarinya (±2,5 dtk/artikel dibagi jumlah
+            # pekerja). Ditulis sebagai RENTANG karena jumlah artikel per hari
+            # tak diketahui sebelum ditarik, dan GDELT kadang membatasi (429).
+            if isi_penuh:
+                st.caption(f"Perkiraan **{hari * 1:.0f}–{hari * 3:.0f} menit** "
+                           f"({hari} hari). Sebagian besar waktu habis untuk "
+                           f"mengambil isi artikel — makin banyak berita yang "
+                           f"cocok, makin lama.")
+            else:
+                st.caption(f"Perkiraan **{max(1, hari * 10 // 60)}–{max(2, hari * 20 // 60)} menit** "
+                           f"({hari} hari, judul saja). Jauh lebih cepat, tapi "
+                           f"sentimen dari judul saja lebih lemah.")
+        # Kunci dari proses yang sedang jalan: tombol dimatikan supaya tidak
+        # ada dua penarikan bersamaan (keduanya jadi lambat karena 429).
+        kunci = os.path.join(proyek, "data", ".arsip_berjalan.json")
+        sedang_jalan = os.path.isfile(kunci)
+        if sedang_jalan:
+            st.warning("Ada penarikan arsip yang sedang berjalan. Tunggu sampai "
+                       "selesai — menjalankan dua sekaligus justru memperlambat "
+                       "keduanya.")
+        if st.button("⬇️ Tarik arsip", width="stretch", key="arsip_jalan",
+                     disabled=sedang_jalan):
             daftar = [b.strip() for b in kata.splitlines() if b.strip()]
             if not daftar:
                 st.error("Isi kata kunci dulu.")
             elif d_mulai > d_akhir:
                 st.error("Tanggal 'Dari' harus sebelum 'Sampai'.")
             else:
+                import re
                 import subprocess
-                perintah = [sys.executable, "tools/tarik_arsip.py", "--kata", *daftar,
-                            "--mulai", d_mulai.isoformat(), "--akhir", d_akhir.isoformat()]
+                perintah = [sys.executable, "-u", "tools/tarik_arsip.py",
+                            "--kata", *daftar, "--mulai", d_mulai.isoformat(),
+                            "--akhir", d_akhir.isoformat()]
                 if not isi_penuh:
                     perintah.append("--tanpa-isi")
-                with st.spinner(f"Menarik arsip {hari} hari..."):
-                    p = subprocess.run(perintah, cwd=proyek, capture_output=True,
-                                       text=True, encoding="utf-8", errors="replace",
-                                       timeout=3 * 3600)
-                keluaran = [b for b in ((p.stdout or "") + (p.stderr or "")).splitlines()
-                            if b.strip() and "it/s]" not in b]
-                st.code("\n".join(keluaran[-20:]) or "(tanpa keluaran)")
+
+                bar = st.progress(0.0)
+                status = st.empty()
+                layar = st.empty()
+                keluaran = []
+                # Dibaca baris demi baris supaya progres terlihat sejak awal —
+                # menunggu proses selesai tanpa kabar apa pun membuat penarikan
+                # panjang terasa menggantung.
+                p = subprocess.Popen(perintah, cwd=proyek, stdout=subprocess.PIPE,
+                                     stderr=subprocess.STDOUT, text=True,
+                                     encoding="utf-8", errors="replace", bufsize=1)
+                pola = re.compile(r"\[\s*(\d+)/(\d+)\]")
+                for baris in p.stdout:
+                    baris = baris.rstrip()
+                    if not baris or "it/s]" in baris:
+                        continue
+                    keluaran.append(baris)
+                    m = pola.search(baris)
+                    if m:
+                        bar.progress(min(1.0, int(m.group(1)) / int(m.group(2))))
+                    status.caption(baris[:120])
+                    layar.code("\n".join(keluaran[-12:]))
+                p.wait()
+                bar.progress(1.0)
+                status.empty()
+                layar.code("\n".join(keluaran[-20:]) or "(tanpa keluaran)")
                 if p.returncode == 0:
                     load_docs.clear()
                     st.success("Selesai. Muat ulang halaman untuk melihat datanya.")

@@ -154,6 +154,8 @@ Atau lewat dashboard: sidebar -> **🗓️ Tarik berita lama (arsip)**.
 | `--maks` | maksimum artikel per jendela (batas GDELT: 250) |
 | `--tanpa-isi` | jangan ambil isi artikel — jauh lebih cepat, hanya judul |
 | `--tanpa-analisis` | jangan langsung hitung sentimen |
+| `--pekerja` | berapa artikel diambil bersamaan (bawaan 12) |
+| `--paksa` | abaikan kunci "sedang berjalan" |
 
 Catatan penting:
 - GDELT hanya memberi **judul**; isi diambil menyusul dari situs aslinya. Untuk
@@ -161,6 +163,13 @@ Catatan penting:
   judul saja.
 - Batas GDELT 250 artikel per permintaan. Bila suatu jendela mencapai batas itu,
   muncul peringatan `mungkin terpotong` — kecilkan `--jendela`.
+- **Lama.** Yang mahal bukan mencarinya, tapi mengambil isi tiap artikel dari
+  situs aslinya: terukur ±2,5 detik per artikel, dibagi jumlah pekerja paralel.
+  Satu hari berisi 60 artikel ≈ 1 menit. Pakai `--tanpa-isi` bila hanya butuh
+  judul (jauh lebih cepat), atau `--pekerja 20` untuk mempercepat.
+- **Satu penarikan saja pada satu waktu.** Dua proses sekaligus justru saling
+  memicu 429. Ada kunci `data/.arsip_berjalan.json` yang mencegahnya, dan tombol
+  di dashboard ikut dimatikan selama ada yang berjalan.
 - GDELT sering membalas **429** bila diburu. Jendela yang gagal diulang otomatis
   di akhir; yang tetap gagal disebutkan tanggalnya, jadi kegagalan tidak
   menyamar sebagai "hari itu memang sepi". Jalankan ulang perintah yang sama
