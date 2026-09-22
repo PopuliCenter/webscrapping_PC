@@ -92,7 +92,7 @@ schedule:
 # ── Laporan otomatis ─────────────────────────────────────────
 # Scheduler membuat laporan harian ke folder laporan/<tanggal>/.
 laporan:
-  enabled: false          # true = laporan dibuat otomatis tiap hari
+  enabled: true           # true = laporan dibuat otomatis tiap hari
   jam: "07:00"            # waktu lokal (Asia/Jakarta); ubah -> restart scheduler
   hari_terakhir: 1        # rentang data yang dilaporkan (1 = sehari terakhir)
   # Mengirim email TIDAK bisa ditarik kembali, jadi matikan secara bawaan.
