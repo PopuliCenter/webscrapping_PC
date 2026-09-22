@@ -138,6 +138,34 @@ news:
     timespan: "1d"
 ```
 
+**Menarik berita LAMA (arsip).** RSS hanya memuat berita terbaru, jadi untuk
+topik yang sudah lewat dipakai arsip GDELT — dibatasi kata kunci & tanggal:
+```powershell
+python tools/tarik_arsip.py --kata "banjir jakarta" "ikn" --mulai 2026-01-01 --akhir 2026-03-31
+python tools/tarik_arsip.py --mulai 2026-08-01 --akhir 2026-08-31 --jendela 3 --tanpa-isi
+```
+Atau lewat dashboard: sidebar -> **🗓️ Tarik berita lama (arsip)**.
+
+| Opsi | Arti |
+|---|---|
+| `--kata` | kata kunci (kosong = pakai `keywords` di config.yaml) |
+| `--mulai` / `--akhir` | rentang tanggal, `YYYY-MM-DD`, akhir termasuk |
+| `--jendela` | berapa hari per permintaan (bawaan 1) |
+| `--maks` | maksimum artikel per jendela (batas GDELT: 250) |
+| `--tanpa-isi` | jangan ambil isi artikel — jauh lebih cepat, hanya judul |
+| `--tanpa-analisis` | jangan langsung hitung sentimen |
+
+Catatan penting:
+- GDELT hanya memberi **judul**; isi diambil menyusul dari situs aslinya. Untuk
+  berita lama sebagian gagal (halaman dihapus/berbayar) — tetap disimpan dengan
+  judul saja.
+- Batas GDELT 250 artikel per permintaan. Bila suatu jendela mencapai batas itu,
+  muncul peringatan `mungkin terpotong` — kecilkan `--jendela`.
+- GDELT sering membalas **429** bila diburu. Jendela yang gagal diulang otomatis
+  di akhir; yang tetap gagal disebutkan tanggalnya, jadi kegagalan tidak
+  menyamar sebagai "hari itu memang sepi". Jalankan ulang perintah yang sama
+  nanti — data yang sudah ada tidak terduplikasi.
+
 **Jadwal tarik:**
 ```yaml
 schedule:

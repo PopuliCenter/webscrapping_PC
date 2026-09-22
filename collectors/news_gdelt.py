@@ -16,6 +16,14 @@ from .base import match_keywords, clean_text
 GDELT_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 
 
+class GdeltGagal(Exception):
+    """Permintaan ke GDELT gagal (biasanya 429 = terlalu sering meminta).
+
+    Dibedakan dari "tidak ada artikel": untuk penarikan arsip, jendela yang
+    GAGAL harus diulang, sedangkan jendela yang memang kosong tidak.
+    """
+
+
 def _build_query(keywords: List[str], lang: str) -> str:
     # GDELT: gabungkan keyword dengan OR; frasa dikutip.
     terms = []
@@ -34,8 +42,45 @@ def _build_query(keywords: List[str], lang: str) -> str:
     return q.strip()
 
 
+def _minta(params: dict, percobaan: int = 3, jeda: float = 5.0) -> dict:
+    """Satu permintaan ke GDELT dengan percobaan ulang. Gagal -> GdeltGagal.
+
+    GDELT membatasi laju cukup ketat; 429 sering muncul. Jeda dinaikkan tiap
+    percobaan (5, 10, 15 detik ... dari `jeda`).
+    """
+    galat = "tidak diketahui"
+    for ke in range(1, percobaan + 1):
+        try:
+            r = requests.get(GDELT_URL, params=params, timeout=40,
+                             headers={"User-Agent": "monitoring-research/1.0"})
+            if r.status_code == 429:
+                galat = "429 (terlalu sering meminta)"
+                if ke < percobaan:
+                    tunggu = jeda * ke
+                    print(f"  [gdelt] 429, tunggu {tunggu:.0f}s...")
+                    time.sleep(tunggu)
+                continue
+            r.raise_for_status()
+            return r.json()
+        except GdeltGagal:
+            raise
+        except Exception as e:
+            galat = str(e)[:80]
+            print(f"  [gdelt] gagal (percobaan {ke}/{percobaan}): {galat}")
+            if ke < percobaan:
+                time.sleep(jeda)
+    raise GdeltGagal(f"gagal setelah {percobaan} percobaan: {galat}")
+
+
 def collect(keywords: List[str], lang: str = "id", timespan: str = "1d",
-            max_records: int = 75) -> List[Document]:
+            max_records: int = 75, mulai: str = "", akhir: str = "",
+            percobaan: int = 3, jeda: float = 5.0, ketat: bool = False) -> List[Document]:
+    """Ambil artikel dari GDELT.
+
+    Tanpa `mulai`/`akhir`: berita terbaru sepanjang `timespan`.
+    Dengan `mulai`/`akhir` (format YYYYMMDDHHMMSS): ARSIP pada rentang itu —
+    dipakai tools/tarik_arsip.py untuk menarik berita lama per kata kunci.
+    """
     if not keywords:
         return []
     query = _build_query(keywords, lang)
@@ -44,26 +89,19 @@ def collect(keywords: List[str], lang: str = "id", timespan: str = "1d",
         "mode": "ArtList",
         "format": "json",
         "maxrecords": min(max_records, 250),
-        "timespan": timespan,
         "sort": "datedesc",
     }
-    data = None
-    for attempt in range(3):
-        try:
-            r = requests.get(GDELT_URL, params=params, timeout=30,
-                             headers={"User-Agent": "monitoring-research/1.0"})
-            if r.status_code == 429:           # GDELT membatasi laju; tunggu lalu coba lagi
-                wait = 5 * (attempt + 1)
-                print(f"  [gdelt] 429, tunggu {wait}s...")
-                time.sleep(wait)
-                continue
-            r.raise_for_status()
-            data = r.json()
-            break
-        except Exception as e:
-            print(f"  [gdelt] gagal (percobaan {attempt + 1}): {e}")
-            time.sleep(2)
-    if data is None:
+    if mulai and akhir:
+        params["startdatetime"] = mulai
+        params["enddatetime"] = akhir
+    else:
+        params["timespan"] = timespan
+    try:
+        data = _minta(params, percobaan, jeda)
+    except GdeltGagal as e:
+        if ketat:
+            raise
+        print(f"  [gdelt] {e}")
         return []
 
     docs: List[Document] = []

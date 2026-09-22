@@ -101,6 +101,59 @@ SETELAN_REM = {
 }
 
 
+def panel_arsip():
+    """Tarik berita LAMA per kata kunci & rentang tanggal (arsip GDELT)."""
+    import datetime as _dt
+    from core.config_edit import baca_list
+
+    proyek = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cfg_path = os.path.join(proyek, "config.yaml")
+    with st.expander("🗓️ Tarik berita lama (arsip)", expanded=False):
+        st.caption("RSS hanya memuat berita terbaru. Untuk berita yang sudah lewat, "
+                   "dipakai arsip GDELT — dibatasi kata kunci dan rentang tanggal.")
+        kata = st.text_area("Kata kunci (satu per baris)",
+                            "\n".join(baca_list(cfg_path, ["keywords"])),
+                            height=80, key="arsip_kata")
+        hari_ini = _dt.date.today()
+        k1, k2 = st.columns(2)
+        d_mulai = k1.date_input("Dari", hari_ini - _dt.timedelta(days=14),
+                                max_value=hari_ini, key="arsip_mulai")
+        d_akhir = k2.date_input("Sampai", hari_ini - _dt.timedelta(days=1),
+                                max_value=hari_ini, key="arsip_akhir")
+        isi_penuh = st.checkbox("Ambil isi artikel penuh", value=True,
+                                help="Lebih lambat. Untuk berita lama sebagian gagal "
+                                     "karena halamannya sudah dihapus atau berbayar.",
+                                key="arsip_isi")
+        hari = (d_akhir - d_mulai).days + 1
+        if hari > 0:
+            st.caption(f"{hari} hari ≈ {hari * 8 // 60} menit {hari * 8 % 60} detik "
+                       f"(GDELT dibatasi lajunya, jadi ada jeda tiap hari)")
+        if st.button("⬇️ Tarik arsip", width="stretch", key="arsip_jalan"):
+            daftar = [b.strip() for b in kata.splitlines() if b.strip()]
+            if not daftar:
+                st.error("Isi kata kunci dulu.")
+            elif d_mulai > d_akhir:
+                st.error("Tanggal 'Dari' harus sebelum 'Sampai'.")
+            else:
+                import subprocess
+                perintah = [sys.executable, "tools/tarik_arsip.py", "--kata", *daftar,
+                            "--mulai", d_mulai.isoformat(), "--akhir", d_akhir.isoformat()]
+                if not isi_penuh:
+                    perintah.append("--tanpa-isi")
+                with st.spinner(f"Menarik arsip {hari} hari..."):
+                    p = subprocess.run(perintah, cwd=proyek, capture_output=True,
+                                       text=True, encoding="utf-8", errors="replace",
+                                       timeout=3 * 3600)
+                keluaran = [b for b in ((p.stdout or "") + (p.stderr or "")).splitlines()
+                            if b.strip() and "it/s]" not in b]
+                st.code("\n".join(keluaran[-20:]) or "(tanpa keluaran)")
+                if p.returncode == 0:
+                    load_docs.clear()
+                    st.success("Selesai. Muat ulang halaman untuk melihat datanya.")
+                else:
+                    st.error("Gagal — lihat pesan di atas.")
+
+
 def panel_rem():
     """Sunting batas harian, jeda & istirahat akun -> config.yaml."""
     from core.config_edit import baca_scalar, set_scalar
@@ -238,6 +291,7 @@ with st.sidebar:
     st.caption(f"Total dokumen di DB: {len(df)}")
     st.divider()
     panel_kata_kunci()
+    panel_arsip()
     panel_rem()
 
 f = df[df["platform"].isin(sel_plat) & df["sentiment_label"].isin(sel_sent)]

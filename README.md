@@ -18,6 +18,7 @@ pendekatan [Drone Emprit](https://pers.droneemprit.id/). Dirancang untuk
 | Kemampuan | Detail |
 |---|---|
 | **Multi-sumber** | RSS media + GDELT (berita), X/Twitter, Instagram, Facebook |
+| **Tarik arsip** | Berita **lama** per kata kunci & rentang tanggal (GDELT), lewat CLI atau dashboard |
 | **Preprocessing Bahasa Indonesia** | Hapus URL/mention/emoji/angka, normalisasi kata baku (slang→baku), stopword ID, **stemming Sastrawi**, penanganan **negasi** (`tidak bagus`→`tidak_bagus`), near-duplicate |
 | **Kamus & model lokal** | Kamus di `resources/` bisa diedit (berlaku seketika); IndoBERT disimpan lokal di `models/` dan **bisa di-fine-tune** dengan data sendiri |
 | **Integrasi HuggingFace** | Dataset **berlabel manusia** (1 jt+ baris), **banding antar-model** dengan pemetaan label aman, **analisis emosi** (marah/takut/sedih/senang/cinta), unggah ke Hub + notebook Colab GPU |
