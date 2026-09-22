@@ -1,0 +1,48 @@
+domain,tier,catatan
+# Bobot media untuk Share of Voice berbobot. EDIT SESUKAMU — file ini dibaca
+# langsung, tidak perlu melatih apa pun.
+#
+# tier 1 = media nasional arus utama (jangkauan besar)
+# tier 2 = media menengah / vertikal / daerah besar
+# tier 3 = sisanya (bawaan untuk domain yang tidak terdaftar)
+#
+# Subdomain otomatis mengikuti domain induknya: news.detik.com -> detik.com.
+#
+# PENTING: bobot ini PERKIRAAN KASAR berdasar reputasi & jangkauan umum, BUKAN
+# data oplah/traffic terverifikasi. Jangan dipakai sebagai klaim jangkauan yang
+# presisi. Kalau punya data traffic sendiri, ganti angkanya di sini.
+detik.com,1,portal terbesar
+kompas.com,1,
+cnnindonesia.com,1,
+tempo.co,1,
+tribunnews.com,1,jaringan daerah besar
+liputan6.com,1,
+kumparan.com,1,
+antaranews.com,1,kantor berita negara
+republika.co.id,1,
+cnbcindonesia.com,1,
+okezone.com,1,
+suara.com,1,
+viva.co.id,1,
+sindonews.com,1,
+merdeka.com,1,
+jpnn.com,1,
+idntimes.com,1,
+beritasatu.com,1,
+mediaindonesia.com,1,
+bisnis.com,2,ekonomi
+kontan.co.id,2,ekonomi
+katadata.co.id,2,data & ekonomi
+tirto.id,2,
+medcom.id,2,
+inews.id,2,
+jawapos.com,2,
+solopos.com,2,daerah
+harianjogja.com,2,daerah
+rri.co.id,2,
+kbr.id,2,
+thejakartapost.com,2,bahasa Inggris
+koran-jakarta.com,2,
+fajar.co.id,2,daerah
+beritajatim.com,2,daerah
+hariansinggalang.co.id,3,daerah kecil

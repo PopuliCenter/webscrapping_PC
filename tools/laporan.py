@@ -122,7 +122,15 @@ def _ringkasan_teks(df, tabel, lonj, mulai, akhir, entitas, disaring: int = 0,
 
     baris += ["## Media paling aktif", ""]
     for m, jml in media.head(8).items():
-        baris.append(f"- {m}: {jml} berita")
+        from analysis.media import tier_media
+        baris.append(f"- {m}: {jml} berita (tier {tier_media(m)})")
+
+    from analysis.media import ringkas_tier
+    tier = ringkas_tier(df)
+    if tier:
+        baris += ["", "Sebaran mutu sumber: " +
+                  " · ".join(f"tier {t['tier']}: {t['dokumen']} ({t['share_%']}%)"
+                             for t in tier)]
 
     negatif = df[df["sentiment_label"] == "negative"]
     if "bagian_negatif" in negatif.columns:
@@ -134,6 +142,22 @@ def _ringkasan_teks(df, tabel, lonj, mulai, akhir, entitas, disaring: int = 0,
             baris.append(f"- **{(r['title'] or '')[:90]}** ({r['source']})")
             if kutip:
                 baris.append(f"  > {kutip}")
+
+    from analysis.entitas import dari_dokumen
+    kutip, ent = dari_dokumen(df.head(150))
+    if ent:
+        baris += ["", "## Tokoh & lembaga paling sering disebut", ""]
+        for nama, jml in ent[:10]:
+            baris.append(f"- {nama}: {jml}x")
+    if kutip:
+        from collections import Counter as _C
+        bicara = _C(k["pembicara"] for k in kutip)
+        baris += ["", "## Kutipan penting", "",
+                  "Pembicara terbanyak: " +
+                  ", ".join(f"{n} ({j})" for n, j in bicara.most_common(5)), ""]
+        for k in kutip[:6]:
+            baris.append(f"- **{k['pembicara']}** ({k['source']}): "
+                         f"\"{k['kutipan'][:180]}\"")
 
     catatan = [f"Dibuat otomatis {datetime.now():%Y-%m-%d %H:%M}",
                "berita sindikasi dihitung sekali",
@@ -160,6 +184,14 @@ def _tulis_excel(path, df, tabel, tren_tabel):
          .reset_index(name="berita")).to_excel(w, sheet_name="Media", index=False)
         if not tren_tabel.empty:
             tren_tabel.to_excel(w, sheet_name="Tren harian")
+        from analysis.entitas import dari_dokumen as _dari
+        kutip, ent = _dari(df.head(150))
+        if ent:
+            pd.DataFrame(ent, columns=["nama", "sebutan"]).to_excel(
+                w, sheet_name="Entitas", index=False)
+        if kutip:
+            pd.DataFrame(kutip)[["pembicara", "kutipan", "source", "sentimen",
+                                 "judul"]].to_excel(w, sheet_name="Kutipan", index=False)
         df[kolom].to_excel(w, sheet_name="Dokumen", index=False)
     return path
 

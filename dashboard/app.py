@@ -421,10 +421,11 @@ if len(f) != len(df):
                f"(filter kata kunci / tanggal / platform / sentimen aktif).")
 
 (tab_ring, tab_sov, tab_topik, tab_teks, tab_heat, tab_sna, tab_bot, tab_ml,
- tab_emo, tab_nuansa, tab_hf, tab_label) = st.tabs(
+ tab_emo, tab_nuansa, tab_hf, tab_label, tab_entitas) = st.tabs(
     ["📊 Ringkasan", "📣 Share of Voice", "📈 Topik", "☁️ Teks & Word Cloud",
      "🔥 Heatmap", "🕸️ Jaringan", "🤖 Bot/Buzzer", "🧪 Klasifikasi ML",
-     "😠 Emosi", "🎯 Intent & Sarkasme", "🔬 Banding Model", "🏷️ Pelabelan"])
+     "😠 Emosi", "🎯 Intent & Sarkasme", "🔬 Banding Model", "🏷️ Pelabelan",
+     "🗣️ Entitas & Kutipan"])
 
 
 # ── TAB 1: Ringkasan ────────────────────────────────────────────
@@ -516,6 +517,15 @@ with tab_sov:
                        "share bisa melebihi 100%. Indeks nada: "
                        "(positif − negatif) ÷ jumlah berita.")
 
+            from analysis import media as _media
+            tier = _media.ringkas_tier(dasar)
+            if tier:
+                st.markdown("**Mutu sumber (tier media)**")
+                st.dataframe(pd.DataFrame(tier), width="stretch", hide_index=True)
+                st.caption("Tier 1 = nasional arus utama, 2 = menengah/vertikal, "
+                           "3 = lainnya. Bobot ini PERKIRAAN reputasi, bukan data "
+                           "traffic — ubah di resources/media_tier.csv.")
+
             tren_sov = _sov.tren(dasar, entitas)
             if not tren_sov.empty and len(tren_sov) > 1:
                 st.markdown("**Tren jumlah berita per hari**")
@@ -554,6 +564,54 @@ with tab_sov:
                                            key=f"unduh_{nama}")
         else:
             st.error("Gagal membuat laporan — lihat pesan di atas.")
+
+
+# ── TAB: Entitas & Kutipan ──────────────────────────────────────
+with tab_entitas:
+    st.subheader("🗣️ Tokoh, lembaga & kutipan")
+    st.caption("Siapa yang muncul di pemberitaan, dan kalimat apa yang dikutip. "
+               "Diambil dengan ATURAN (pola kutipan bahasa Indonesia), bukan "
+               "model NER — hasilnya bisa diperiksa, tapi kutipan tanpa tanda "
+               "kutip atau nama tak lazim bisa terlewat.")
+    if f.empty:
+        st.info("Tidak ada dokumen pada filter saat ini.")
+    else:
+        from analysis import entitas as _ent
+        batas = st.slider("Jumlah berita yang dipindai", 20, 500,
+                          min(200, len(f)), step=20, key="ent_batas",
+                          help="Makin banyak makin lambat.")
+        with st.spinner("Memindai teks..."):
+            kutip, tabel_ent = _ent.dari_dokumen(f.head(batas))
+
+        k1, k2 = st.columns(2)
+        with k1:
+            st.markdown("**Tokoh & lembaga paling sering disebut**")
+            if tabel_ent:
+                st.dataframe(pd.DataFrame(tabel_ent, columns=["nama", "sebutan"]),
+                             width="stretch", hide_index=True, height=380)
+            else:
+                st.info("Belum ada entitas terdeteksi.")
+        with k2:
+            st.markdown("**Pembicara paling sering dikutip**")
+            if kutip:
+                from collections import Counter as _C
+                bicara = _C(k["pembicara"] for k in kutip).most_common(20)
+                st.dataframe(pd.DataFrame(bicara, columns=["pembicara", "kutipan"]),
+                             width="stretch", hide_index=True, height=380)
+            else:
+                st.info("Belum ada kutipan terdeteksi.")
+
+        if kutip:
+            st.markdown(f"**Kutipan ({len(kutip)} ditemukan)**")
+            cari = st.text_input("Saring menurut nama pembicara", key="ent_cari")
+            tampil = [k for k in kutip
+                      if not cari or cari.lower() in k["pembicara"].lower()]
+            if tampil:
+                st.dataframe(pd.DataFrame(tampil)[["pembicara", "kutipan", "source",
+                                                   "sentimen", "judul"]],
+                             width="stretch", hide_index=True, height=420)
+            else:
+                st.info("Tidak ada pembicara yang cocok.")
 
 
 # ── TAB 2: Tren per topik ───────────────────────────────────────

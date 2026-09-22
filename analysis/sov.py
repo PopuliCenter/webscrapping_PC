@@ -45,19 +45,32 @@ def muat_dokumen(db_path: str, mulai: str = "", akhir: str = "",
     return df
 
 
-def hitung(df: pd.DataFrame, entitas: list) -> pd.DataFrame:
-    """-> tabel per entitas: jumlah, share %, sebaran sentimen, indeks nada."""
+def hitung(df: pd.DataFrame, entitas: list, pakai_bobot: bool = True) -> pd.DataFrame:
+    """-> tabel per entitas: jumlah, share %, sebaran sentimen, indeks nada.
+
+    `pakai_bobot=True` menambah kolom share BERBOBOT: satu berita di media
+    nasional besar dihitung lebih berat daripada di blog daerah (lihat
+    analysis/media.py). Share mentah tetap ditampilkan berdampingan — keduanya
+    menjawab pertanyaan berbeda: "seberapa sering" vs "seberapa besar gaungnya".
+    """
     if df.empty or not entitas:
         return pd.DataFrame()
     total = len(df)
+    if pakai_bobot:
+        from .media import tambah_bobot
+        df = tambah_bobot(df)
+        total_bobot = float(df["bobot"].sum()) or 1.0
     baris = []
     for e in entitas:
         kena = df[df["teks"].map(lambda t: bool(match_keywords(t, [e])))]
         n = len(kena)
         if not n:
-            baris.append({"entitas": e, "dokumen": 0, "share_%": 0.0, "positif": 0,
-                          "netral": 0, "negatif": 0, "indeks_nada": 0.0,
-                          "media": 0, "media_teratas": ""})
+            kosong = {"entitas": e, "dokumen": 0, "share_%": 0.0, "positif": 0,
+                      "netral": 0, "negatif": 0, "indeks_nada": 0.0,
+                      "media": 0, "media_teratas": ""}
+            if pakai_bobot:
+                kosong["share_bobot_%"] = 0.0
+            baris.append(kosong)
             continue
         s = kena["sentiment_label"].value_counts()
         pos, net, neg = int(s.get("positive", 0)), int(s.get("neutral", 0)), int(s.get("negative", 0))
@@ -66,6 +79,8 @@ def hitung(df: pd.DataFrame, entitas: list) -> pd.DataFrame:
             "entitas": e,
             "dokumen": n,
             "share_%": round(100 * n / total, 1),
+            **({"share_bobot_%": round(100 * float(kena["bobot"].sum()) / total_bobot, 1)}
+               if pakai_bobot else {}),
             "positif": pos, "netral": net, "negatif": neg,
             "indeks_nada": round((pos - neg) / n, 3),
             "media": int(kena["source"].nunique()),
